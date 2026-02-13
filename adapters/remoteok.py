@@ -80,7 +80,7 @@ def _text(el: Optional[ET.Element]) -> str:
 
 
 def fetch_remoteok_jobs(
-        rss_url: str = config.REMOTEOK_DEFAULT_RSS_URL,
+        rss_url: str = REMOTEOK_DEFAULT_RSS_URL,
         limit: int = config.REMOTEOK_MAX_ITEMS,
 ) -> List[NormalizedJob]:
     """
