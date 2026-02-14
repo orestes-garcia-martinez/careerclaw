@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Remote OK Jobs</title>
+        <link>https://remoteok.com</link>
+        <description>Remote jobs feed</description>
+
+        <item>
+            <title>Senior Frontend Engineer at Acme Corp</title>
+            <link>https://remoteok.com/remote-jobs/999999-senior-frontend-engineer-acme-corp</link>
+            <pubDate>Mon, 12 Feb 2026 10:00:00 +0000</pubDate>
+            <description><![CDATA[
+        <p>Work on React and TypeScript UI systems.</p>
+        <p>Bonus: AWS experience.</p>
+      ]]></description>
+            <category>react</category>
+            <category>typescript</category>
+            <category>usa</category>
+        </item>
+
+        <item>
+            <title>Backend Engineer at Beta Systems</title>
+            <link>https://remoteok.com/remote-jobs/888888-backend-engineer-beta-systems</link>
+            <pubDate>Tue, 13 Feb 2026 14:30:00 +0000</pubDate>
+            <description><![CDATA[
+        <p>Build Python services and data pipelines.</p>
+        <br/>
+        <p>Strong Postgres skills preferred.</p>
+      ]]></description>
+            <category>python</category>
+            <category>postgres</category>
+            <category>worldwide</category>
+        </item>
+
+    </channel>
+</rss>

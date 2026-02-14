@@ -22,3 +22,14 @@ The format is inspired by Keep a Changelog and follows semantic versioning princ
 - HN thread ID is manually configured in MVP.
 - Company/title parsing heuristics are best-effort.
 - HTML decoding improvements deferred.
+
+## [0.1.1] - 2026-02-13
+
+### Added
+- Deterministic matching engine package (`careerclaw/matching/`) with explainable scoring breakdown
+- Unit tests for matching engine and scoring
+- Adapter contract tests with offline fixtures (RemoteOK RSS XML, HN JSON)
+
+### Changed
+- Moved adapters into `careerclaw/adapters/` for consistent package imports
+- Added `pytest` to `requirements.txt`
