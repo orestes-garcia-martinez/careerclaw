@@ -62,6 +62,21 @@ Within 30 days:
 
 ---
 
+## 🧪 Development
+
+Create venv (Windows PowerShell):
+- python -m venv .venv
+- .\.venv\Scripts\Activate
+- python -m pip install -r requirements.txt
+
+Run tests:
+- python -m pytest -q
+
+Run smoke test (live sources):
+- python -m scripts.smoke_test_sources
+
+---
+
 ## 📌 License
 
 TBD — will be added before public release.
