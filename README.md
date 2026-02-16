@@ -105,7 +105,7 @@ Example:
 ```json
     {
       "version": 1,
-      "user_id": "orestes",
+      "user_id": "test-user",,
       "skills": ["react", "typescript", "python", "aws", "observability"],
       "target_roles": ["frontend engineer", "software engineer"],
       "experience_years": 8,
