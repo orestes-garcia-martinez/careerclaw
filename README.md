@@ -10,9 +10,16 @@ Daily Shortlist → Ranked Matches → Draft Message → Track Status
 
 ## 🚧 Status
 
-MVP in development (v0.1)
+MVP in development (v0.1.x)
 
-Sources locked:
+Phase 4 complete:
+- End-to-end Daily Briefing orchestration
+- Profile-driven ranking
+- Draft generation
+- Persistent tracking
+- Run instrumentation
+
+Sources:
 - RemoteOK RSS
 - Hacker News “Who’s Hiring”
 
@@ -32,19 +39,21 @@ Validate:
 
 CareerClaw is structured into:
 
-- Adapters (source ingestion)
-- Normalized Job Schema
-- Deterministic Matching Engine
-- LLM Drafting Layer
-- Tracking System
-- Daily Briefing Composer
+- **Adapters** (source ingestion)
+- **Normalized Job Schema**
+- **Deterministic Matching Engine**
+- **Drafting Layer**
+- **Tracking Repository**
+- **Daily Briefing Orchestrator**
+
+Entry point:
+```powershell
+python -m careerclaw.briefing
+```
 
 ---
 
-## 📊 Success Metrics
-
-Within 30 days:
-
+## 📊 Success Metrics (30-Day Target)
 - ≥ 100 installs
 - ≥ 20 weekly active users
 - ≥ 30% of active users run briefing 2+ times
@@ -53,24 +62,85 @@ Within 30 days:
 ---
 
 ## 🔐 Security Principles
-
 - Minimal permission model
 - No credential storage
 - Signed commits
 - Transparent source code
 - Versioned releases
+- Local-only runtime state
 
 ---
 
 ## 🧪 Development
 
-Create venv (Windows PowerShell):
-- python -m venv .venv
-- .\.venv\Scripts\Activate
-- python -m pip install -r requirements.txt
+## ⚙️ Installation (Recommended)
 
+Create a virtual environment (PowerShell):
+```powershell
+    python -m venv .venv
+    .\.venv\Scripts\Activate
+```
+
+
+Install in editable mode with dev dependencies:
+```powershell
+    python -m pip install -e ".[dev]"
+```
+
+This ensures:
+- Proper package imports
+- Editable source linkage
+- pytest works reliably
+
+---
+
+## 👤 Profile Setup
+Create a runtime directory:
+```powershell
+    mkdir .careerclaw
+```
+
+Create .careerclaw/profile.json
+Example:
+```json
+    {
+      "version": 1,
+      "user_id": "orestes",
+      "skills": ["react", "typescript", "python", "aws", "observability"],
+      "target_roles": ["frontend engineer", "software engineer"],
+      "experience_years": 8,
+      "work_mode": "remote",
+      "resume_summary": "Senior engineer focused on systems thinking and reliability.",
+      "location": "United States",
+      "salary_min": 140000,
+      "salary_max": 190000
+    }
+```
+
+Run Daily Briefing:
+```powershell
+    python -m careerclaw.briefing   
+    python -m careerclaw.briefing --dry-run
+    python -m careerclaw.briefing --json --dry-run
+    python -m careerclaw.briefing --profile ..careerclaw\profile.json --top-k 3
+```
+
+## 📂 Runtime Artifacts
+Stored locally under:
+.careerclaw/
+
+Files:
+- profile.json — user configuration
+- tracking.json — saved jobs (deduped)
+- runs.jsonl — append-only run log (analytics stream)
+
+---
+
+## 🧪 Testing
 Run tests:
-- python -m pytest -q
+```powershell
+pytest
+```
 
 Run smoke test (live sources):
 - python -m scripts.smoke_test_sources

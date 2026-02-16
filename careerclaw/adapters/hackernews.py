@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from careerclaw import config
+import html as html_module
 import json
 import re
 
@@ -14,6 +15,10 @@ from careerclaw.models import JobSource, NormalizedJob, normalize_whitespace
 HN_ITEM_URL = "https://hacker-news.firebaseio.com/v0/item/{item_id}.json"
 HN_ITEM_WEB_URL = "https://news.ycombinator.com/item?id={item_id}"
 
+_TAG_RE = re.compile(r"</?\w+(?:\s+[^<>]*?)?>")
+_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_WHITESPACE_RUN_RE = re.compile(r"[ \t]{2,}")
+_BLANK_LINES_RE = re.compile(r"\n{3,}")
 
 def _fetch_json(url: str, timeout_seconds: int = config.HTTP_TIMEOUT_SECONDS) -> Dict[str, Any]:
     req = Request(
@@ -106,27 +111,44 @@ def fetch_hn_whos_hiring_jobs(
     return jobs
 
 
-def _strip_hn_html(html: str) -> str:
+def _normalize_multiline(text: str) -> str:
+    """
+    Whitespace normalization that preserves paragraph breaks.
+    Use for long-form content like job descriptions.
+    """
+    if not text:
+        return ""
+    t = text.replace("\r\n", "\n").replace("\r", "\n")
+    t = "\n".join(line.strip() for line in t.split("\n"))
+    t = _WHITESPACE_RUN_RE.sub(" ", t)
+    t = _BLANK_LINES_RE.sub("\n\n", t)
+    return t.strip()
+
+
+def _strip_hn_html(raw_html: str) -> str:
     """
     HN comment 'text' is HTML. MVP-grade conversion:
     - Convert <p> and <br> to newlines
-    - Strip other tags
-    - Decode common entities
+    - Strip tags safely
+    - Decode ALL HTML entities (e.g., &#x2F; -> /)
+    - Normalize whitespace
     """
-    if not html:
+    if not raw_html:
         return ""
-    html = html.replace("<p>", "\n\n").replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
-    # Remove all tags
-    html = re.sub(r"(?s)<.*?>", " ", html)
-    # Decode common entities
-    html = (
-        html.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", '"')
-        .replace("&#39;", "'")
+
+    raw = (
+        raw_html.replace("<p>", "\n\n")
+        .replace("<br>", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
     )
-    return html
+
+    raw = _COMMENT_RE.sub(" ", raw)
+    raw = _TAG_RE.sub(" ", raw)
+
+    # This fixes Kotlin&#x2F;Java... -> Kotlin/Java...
+    raw = html_module.unescape(raw)
+    return _normalize_multiline(raw)
 
 
 def _best_effort_parse_header(text: str) -> Tuple[str, str, Optional[str]]:
