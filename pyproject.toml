@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "careerclaw"
+version = "0.1.2"
+description = "CareerClaw: AI-powered job search assistant (ClawHub/OpenClaw skill)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4,<9",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["careerclaw*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
