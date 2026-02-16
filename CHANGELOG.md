@@ -1,7 +1,7 @@
 
 ---
 
-# ✅ Updated CHANGELOG.md (Version 0.1.2)
+# ✅ CHANGELOG.md
 
 ```markdown
 # Changelog
@@ -12,7 +12,7 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ---
 
-## [0.1.2] - 2026-02-16
+## [0.2.0] - 2026-02-16
 
 ### Added
 - Phase 4: Daily Briefing orchestration (`python -m careerclaw.briefing`)
