@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 import json
 import re
 
-from careerclaw.core.text_processing import tokenize, tokenize_stream
+from careerclaw.core.text_processing import tokenize, tokenize_stream, extract_phrases
 
 
 _IMPACT_RE = re.compile(
@@ -22,18 +22,6 @@ class ResumeIntelligence:
     impact_signals: List[str]
     source: str  # "summary_only" | "summary_plus_file"
 
-
-def _extract_phrases(tokens: List[str], *, max_phrases: int = 30) -> List[str]:
-    """Deterministic bigram phrases."""
-    if len(tokens) < 2:
-        return []
-    counts: Dict[str, int] = {}
-    for i in range(len(tokens) - 1):
-        bg = f"{tokens[i]} {tokens[i+1]}"
-        counts[bg] = counts.get(bg, 0) + 1
-    # sort: frequency desc, then lexicographic for determinism
-    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    return [p for p, _ in ordered[:max_phrases]]
 
 
 def _extract_impacts(text: str, *, max_items: int = 20) -> List[str]:
@@ -56,7 +44,7 @@ def build_resume_intelligence(*, resume_summary: str, resume_text: str) -> Resum
 
     kw = sorted(tokenize(combined))
     stream = tokenize_stream(combined)
-    phrases = _extract_phrases(stream)
+    phrases = extract_phrases(stream, ngrams=(2, 3), max_phrases=30)
     impacts = _extract_impacts(combined)
 
     return ResumeIntelligence(
