@@ -147,6 +147,48 @@ Run smoke test (live sources):
 
 ---
 
+## Module dependency layering (Phase 5)
+
+CareerClaw is structured in layers to keep Phase-5 additions stable and avoid circular imports.
+
+**Dependency rule:** higher layers may depend on lower layers, but not vice-versa.
+
+### Layers
+
+1) **Core (infrastructure)**
+   - `careerclaw/core/*`
+   - Shared text processing, normalization, small utilities.
+   - **Must not import** from matching, briefing, adapters, tracking, or I/O.
+
+2) **Domain logic**
+   - `careerclaw/matching/*` (ranking + scoring)
+   - `careerclaw/resume_intel.py` (resume intelligence)
+   - Future: requirements extraction, gap analysis
+   - May import from `careerclaw/core/*`
+   - Should not import from CLI orchestration or external adapters.
+
+3) **I/O + adapters**
+   - `careerclaw/adapters/*` (RemoteOK, HN)
+   - `careerclaw/io/*` (resume loaders, file utilities)
+   - May import from `careerclaw/core/*` and `careerclaw/models.py`
+
+4) **Persistence**
+   - `careerclaw/tracking.py`
+   - Local repository I/O (`.careerclaw/` runtime artifacts)
+   - May import from models/core only
+
+5) **Orchestration / CLI**
+   - `careerclaw/briefing.py`
+   - Composes the pipeline: fetch → dedupe → rank → draft → persist → output
+   - May import from all lower layers, but **nothing should import briefing**.
+
+### Why tokenization lives in `careerclaw/core`
+
+Tokenization is used across matching and Phase-5 resume intelligence. Placing it in `careerclaw/core/text_processing.py`
+makes it shared infrastructure and prevents coupling Phase-5 features to the matching package.
+
+---
+
 ## 📌 License
 
 TBD — will be added before public release.

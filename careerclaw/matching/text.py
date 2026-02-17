@@ -1,41 +1,9 @@
 from __future__ import annotations
 
-import re
-from typing import Iterable, Set
+# Backwards-compatible shim.
+# Text processing now lives in careerclaw.core.text_processing so multiple modules
+# (matching, resume intelligence, requirements, etc.) share one implementation.
 
-_WORD_RE = re.compile(r"[a-z0-9]+(?:[#+.-][a-z0-9]+)*", re.IGNORECASE)
+from careerclaw.core.text_processing import tokenize, tokenize_stream, tokens_from_list
 
-# Keep this small + stable for deterministic MVP
-_STOPWORDS = {
-    "the", "and", "or", "to", "of", "in", "for", "on", "with", "a", "an", "as",
-    "is", "are", "be", "by", "at", "from", "this", "that", "it", "you", "we",
-    "our", "your", "they", "their", "will", "can", "may", "must",
-    "role", "roles", "job", "jobs", "position", "positions",
-}
-
-def tokenize(text: str) -> Set[str]:
-    """
-    Deterministic, lightweight tokenizer:
-    - lowercases
-    - extracts alnum-ish tokens, allowing + # . - inside tokens (e.g., c#, c++, node.js)
-    - removes short noise + stopwords
-    """
-    if not text:
-        return set()
-
-    tokens = set()
-    for m in _WORD_RE.finditer(text.lower()):
-        tok = m.group(0).strip(".-")
-        if len(tok) < 2:
-            continue
-        if tok in _STOPWORDS:
-            continue
-        tokens.add(tok)
-    return tokens
-
-
-def tokens_from_list(items: Iterable[str]) -> Set[str]:
-    out: Set[str] = set()
-    for it in items or []:
-        out |= tokenize(it)
-    return out
+__all__ = ["tokenize", "tokenize_stream", "tokens_from_list"]
