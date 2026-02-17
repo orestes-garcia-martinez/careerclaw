@@ -16,6 +16,8 @@ from careerclaw.drafting import DraftResult, draft_outreach
 from careerclaw.tracking import JsonTrackingRepository, TrackingRepository, default_repo_dir
 from careerclaw.io.resume_loader import load_resume_text
 from careerclaw.resume_intel import build_resume_intelligence, cache_resume_intelligence, resume_intelligence_to_dict, ResumeIntelligence
+from careerclaw.requirements import extract_job_requirements
+from careerclaw.gap import analyze_gap
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,7 @@ class RankedMatch:
     job: NormalizedJob
     score: float
     explanation: Dict[str, Any]  # mapped from MatchBreakdown.details
+    analysis: Dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class DailyBriefingResult:
                     "job": m.job.to_dict(),
                     "score": m.score,
                     "explanation": m.explanation,
+                    "analysis": m.analysis,
                 }
                 for m in self.top_matches
             ],
@@ -118,14 +122,20 @@ def run_daily_briefing(
 
     ranked = rank_jobs(profile=profile, jobs=jobs, top_n=top_k)
 
-    matches: List[RankedMatch] = [
-        RankedMatch(
-            job=item.job,
-            score=float(item.score),
-            explanation=item.breakdown.details,
+    matches: List[RankedMatch] = []
+    for item in ranked:
+        analysis = None
+        if resume_intel is not None:
+            req = extract_job_requirements(item.job)
+            analysis = analyze_gap(resume=resume_intel, job=req).to_dict().get("analysis")
+        matches.append(
+            RankedMatch(
+                job=item.job,
+                score=float(item.score),
+                explanation=item.breakdown.details,
+                analysis=analysis,
+            )
         )
-        for item in ranked
-    ]
 
     drafts = [draft_outreach(profile=profile, job=m.job) for m in matches]
 
@@ -178,6 +188,20 @@ def print_human_summary(result: DailyBriefingResult, profile: UserProfile) -> No
         loc = f" — {j.location}" if j.location else ""
         print(f"\n{idx}) {j.title} @ {j.company}{loc}  [{j.source.value}]")
         print(f"   score: {m.score}")
+
+        if m.analysis:
+            fit = m.analysis.get("fit_score")
+            if isinstance(fit, (int, float)):
+                print(f"   fit: {int(fit * 100)}%")
+            sig_kw = (m.analysis.get("signals") or {}).get("keywords") or []
+            sig_ph = (m.analysis.get("signals") or {}).get("phrases") or []
+            # show a small, readable glimpse (avoid the list-of-death)
+            preview = []
+            preview.extend(sig_ph[:2])
+            preview.extend(sig_kw[:2])
+            preview = [p for p in preview if p]
+            if preview:
+                print(f"   highlights: {', '.join(preview)}")
 
         signals = _extract_top_skill_signals(m.explanation, max_items=2)
         if signals:
