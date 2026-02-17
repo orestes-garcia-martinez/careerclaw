@@ -14,6 +14,8 @@ from careerclaw.sources import fetch_all_jobs
 from careerclaw.matching.engine import rank_jobs
 from careerclaw.drafting import DraftResult, draft_outreach
 from careerclaw.tracking import JsonTrackingRepository, TrackingRepository, default_repo_dir
+from careerclaw.io.resume_loader import load_resume_text
+from careerclaw.resume_intel import build_resume_intelligence, cache_resume_intelligence, resume_intelligence_to_dict, ResumeIntelligence
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,7 @@ class DailyBriefingResult:
     tracking_already_present: int
     duration_ms: int
     dry_run: bool
+    resume_intelligence: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -55,6 +58,7 @@ class DailyBriefingResult:
             },
             "duration_ms": self.duration_ms,
             "dry_run": self.dry_run,
+            "resume_intelligence": self.resume_intelligence,
         }
 
 
@@ -95,6 +99,7 @@ def run_daily_briefing(
         top_k: int = 3,
         repo: Optional[TrackingRepository] = None,
         dry_run: bool = False,
+        resume_intel: Optional[ResumeIntelligence] = None,
 ) -> DailyBriefingResult:
     """
     Skill-first the entry point:
@@ -102,6 +107,8 @@ def run_daily_briefing(
       - returns structured JSON-serializable result
     """
     start = time.time()
+
+    resume_intel_dict = resume_intelligence_to_dict(resume_intel) if resume_intel else None
 
     jobs = fetch_all_jobs()
     fetched = len(jobs)
@@ -151,6 +158,7 @@ def run_daily_briefing(
         tracking_already_present=tracking_already,
         duration_ms=duration_ms,
         dry_run=dry_run,
+        resume_intelligence=resume_intel_dict,
     )
 
 
@@ -233,6 +241,8 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=3, help="How many matches to return")
     parser.add_argument("--json", action="store_true", help="Print JSON only (machine-readable)")
     parser.add_argument("--dry-run", action="store_true", help="Run without writing tracking/runs")
+    parser.add_argument("--resume-text", type=str, default="", help="Optional path to resume .txt")
+    parser.add_argument("--resume-pdf", type=str, default="", help="Optional path to resume .pdf")
     args = parser.parse_args()
 
     profile: UserProfile
@@ -258,11 +268,32 @@ def main() -> None:
                 resume_summary="Senior software engineer focused on systems thinking, reliability, and user experience.",
             )
 
+
+    # Resume Intelligence (Phase 5A foundation)
+    loaded = load_resume_text(
+        resume_text_path=(args.resume_text or None) if hasattr(args, "resume_text") else None,
+        resume_pdf_path=(args.resume_pdf or None) if hasattr(args, "resume_pdf") else None,
+    )
+    intel = build_resume_intelligence(
+        resume_summary=profile.resume_summary,
+        resume_text=loaded.text,
+    )
+
+    # Cache only when not dry-run (keeps tests + safety behavior consistent)
+    if not args.dry_run:
+        try:
+            cache_path = default_repo_dir() / "resume_intel.json"
+            cache_resume_intelligence(cache_path, intel)
+        except Exception:
+            # best-effort cache; never fail the run
+            pass
+
     result = run_daily_briefing(
         user_id=args.user_id,
         profile=profile,
         top_k=args.top_k,
         dry_run=args.dry_run,
+        resume_intel=intel,
     )
 
     if args.json:
