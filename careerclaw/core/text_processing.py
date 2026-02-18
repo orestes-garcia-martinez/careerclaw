@@ -25,6 +25,14 @@ _STOPWORDS = {
     # common boilerplate words in listings
     "role", "roles", "job", "jobs", "position", "positions", "responsibilities", "responsibility",
     "requirements", "required", "preferred", "skills", "skill", "experience", "team", "work",
+    # Phase-5E: recruitment process noise — these carry zero signal value for matching
+    # and pollute gap keyword lists and score denominators.
+    "apply", "applying", "applicant", "applicants", "application", "applications", "submit", "submission",
+    "candidate", "candidates", "qualified", "successful", "shortlisted",
+    "interview", "interviewing", "hire", "hiring", "onboard", "onboarding",
+    "competitive", "opportunity", "opportunities", "benefit", "benefits", "package",
+    "responsible", "seeking", "looking", "welcome", "encouraged",
+    "bonus", "nice", "have",
 }
 
 

@@ -12,7 +12,6 @@ Daily Shortlist → Ranked Matches → Draft Message → Track Status
 
 MVP in development (v0.1.x)
 
-Phase 4 complete:
 - End-to-end Daily Briefing orchestration
 - Profile-driven ranking
 - Draft generation
@@ -50,6 +49,26 @@ Entry point:
 ```powershell
 python -m careerclaw.briefing
 ```
+
+Optional flags (Phase 5):
+```powershell
+# Provide resume text/PDF (txt takes precedence if both provided)
+python -m careerclaw.briefing --resume-text .\resume.txt
+python -m careerclaw.briefing --resume-pdf  .\resume.pdf
+
+# Control CLI gap-analysis verbosity
+python -m careerclaw.briefing --analysis summary   # default (fit + highlights)
+python -m careerclaw.briefing --analysis full      # prints matched/missing lists (bounded)
+python -m careerclaw.briefing --analysis off       # hides gap-analysis output in CLI
+
+# Machine-readable output (includes per-match analysis.fit_score + signals/gaps)
+python -m careerclaw.briefing --json
+```
+
+Notes:
+- `analysis.fit_score` is deterministic and **section-aware** (Skills/Summary/Experience > Interests).
+- `analysis.fit_score_unweighted` is included for regression checking and interpretability.
+
 
 ---
 
@@ -105,7 +124,7 @@ Example:
 ```json
     {
       "version": 1,
-      "user_id": "test-user",
+      "user_id": "orestes",
       "skills": ["react", "typescript", "python", "aws", "observability"],
       "target_roles": ["frontend engineer", "software engineer"],
       "experience_years": 8,
@@ -144,6 +163,12 @@ pytest
 
 Run smoke test (live sources):
 - python -m scripts.smoke_test_sources
+
+---
+
+## 📌 License
+
+TBD — will be added before public release.
 
 ---
 
@@ -186,9 +211,3 @@ CareerClaw is structured in layers to keep Phase-5 additions stable and avoid ci
 
 Tokenization is used across matching and Phase-5 resume intelligence. Placing it in `careerclaw/core/text_processing.py`
 makes it shared infrastructure and prevents coupling Phase-5 features to the matching package.
-
----
-
-## 📌 License
-
-TBD — will be added before public release.

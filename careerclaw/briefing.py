@@ -172,7 +172,7 @@ def run_daily_briefing(
     )
 
 
-def print_human_summary(result: DailyBriefingResult, profile: UserProfile) -> None:
+def print_human_summary(result: DailyBriefingResult, profile: UserProfile, *, analysis_mode: str = "summary") -> None:
     print("\n=== CareerClaw Daily Briefing ===")
     print(f"User: {result.user_id}")
     print(f"Fetched jobs: {result.fetched_jobs} | After dedupe: {result.considered_jobs}")
@@ -189,19 +189,35 @@ def print_human_summary(result: DailyBriefingResult, profile: UserProfile) -> No
         print(f"\n{idx}) {j.title} @ {j.company}{loc}  [{j.source.value}]")
         print(f"   score: {m.score}")
 
-        if m.analysis:
+        if analysis_mode != "off" and m.analysis:
             fit = m.analysis.get("fit_score")
             if isinstance(fit, (int, float)):
                 print(f"   fit: {int(fit * 100)}%")
-            sig_kw = (m.analysis.get("signals") or {}).get("keywords") or []
-            sig_ph = (m.analysis.get("signals") or {}).get("phrases") or []
-            # show a small, readable glimpse (avoid the list-of-death)
-            preview = []
-            preview.extend(sig_ph[:2])
-            preview.extend(sig_kw[:2])
-            preview = [p for p in preview if p]
-            if preview:
-                print(f"   highlights: {', '.join(preview)}")
+
+            if analysis_mode == "summary":
+                summary = (m.analysis.get("summary") or {})
+                top = summary.get("top_signals") or {}
+                top_ph = top.get("phrases") or []
+                top_kw = top.get("keywords") or []
+                preview = []
+                preview.extend(top_ph[:2])
+                preview.extend(top_kw[:2])
+                preview = [p for p in preview if p]
+                if preview:
+                    print(f"   highlights: {', '.join(preview)}")
+            else:  # full
+                sig = m.analysis.get("signals") or {}
+                gaps = m.analysis.get("gaps") or {}
+                sig_ph = (sig.get("phrases") or [])[:10]
+                sig_kw = (sig.get("keywords") or [])[:10]
+                gap_ph = (gaps.get("phrases") or [])[:10]
+                gap_kw = (gaps.get("keywords") or [])[:10]
+                if sig_ph or sig_kw:
+                    print(f"   matched phrases: {', '.join(sig_ph)}" if sig_ph else "   matched phrases: -")
+                    print(f"   matched keywords: {', '.join(sig_kw)}" if sig_kw else "   matched keywords: -")
+                if gap_ph or gap_kw:
+                    print(f"   missing phrases: {', '.join(gap_ph)}" if gap_ph else "   missing phrases: -")
+                    print(f"   missing keywords: {', '.join(gap_kw)}" if gap_kw else "   missing keywords: -")
 
         signals = _extract_top_skill_signals(m.explanation, max_items=2)
         if signals:
@@ -267,6 +283,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Run without writing tracking/runs")
     parser.add_argument("--resume-text", type=str, default="", help="Optional path to resume .txt")
     parser.add_argument("--resume-pdf", type=str, default="", help="Optional path to resume .pdf")
+    parser.add_argument("--analysis", choices=["off","summary","full"], default="summary", help="Gap analysis output in CLI (off|summary|full)")
     args = parser.parse_args()
 
     profile: UserProfile
@@ -301,6 +318,8 @@ def main() -> None:
     intel = build_resume_intelligence(
         resume_summary=profile.resume_summary,
         resume_text=loaded.text,
+        skills=profile.skills,
+        target_roles=profile.target_roles,
     )
 
     # Cache only when not dry-run (keeps tests + safety behavior consistent)
@@ -323,7 +342,7 @@ def main() -> None:
     if args.json:
         print(json.dumps(result.to_dict(), indent=2))
     else:
-        print_human_summary(result, profile=profile)
+        print_human_summary(result, profile=profile, analysis_mode=args.analysis)
         print("\nJSON Output (for skills/agents):")
         print(json.dumps(result.to_dict(), indent=2))
 

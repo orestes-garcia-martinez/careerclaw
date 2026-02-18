@@ -7,21 +7,35 @@ from careerclaw.models import NormalizedJob
 from careerclaw.core.text_processing import tokenize, tokenize_stream, extract_phrases
 
 
+def _dedupe_first_seen(items: List[str]) -> List[str]:
+    seen = set()
+    out: List[str] = []
+    for it in items:
+        if it and it not in seen:
+            out.append(it)
+            seen.add(it)
+    return out
+
+
 @dataclass(frozen=True)
 class JobRequirements:
     """
-    Deterministic, domain-agnostic "requirements signals" extracted from a job posting.
-    We intentionally avoid trying to classify required vs. preferred in Phase-5C.
+    Deterministic, domain-agnostic "requirement signals" extracted from a job posting.
+
+    Phase-5C introduced keywords(set) + phrases(list). Phase-5D adds ordered keyword_stream
+    so downstream outputs can preserve JOB order deterministically (better for agent contexts).
     """
     keywords: Set[str]
-    phrases: List[str]
+    keyword_stream: List[str]  # ordered, first-seen, deduped
+    phrases: List[str]         # ordered, first-seen (bigrams/trigrams)
 
 
 def extract_job_requirements(job: NormalizedJob, *, max_phrases: int = 40) -> JobRequirements:
     """
     Extract keywords + phrases from job title + description (and tags if present).
-    - Keywords: set() for fast overlap checks.
-    - Phrases: ordered list (first-seen), deterministic bigrams/trigrams.
+    - keywords: set() for fast overlap checks
+    - keyword_stream: ordered tokens (first-seen, deduped) for stable human/agent presentation
+    - phrases: ordered list (first-seen), deterministic bigrams/trigrams
     """
     text_parts = [job.title or "", job.description or ""]
     if job.tags:
@@ -29,6 +43,7 @@ def extract_job_requirements(job: NormalizedJob, *, max_phrases: int = 40) -> Jo
     text = "\n".join(text_parts)
 
     stream = tokenize_stream(text)
+    keyword_stream = _dedupe_first_seen(stream)
     keywords = tokenize(text)
     phrases = extract_phrases(stream, ngrams=(2, 3), max_phrases=max_phrases)
-    return JobRequirements(keywords=keywords, phrases=phrases)
+    return JobRequirements(keywords=keywords, keyword_stream=keyword_stream, phrases=phrases)
