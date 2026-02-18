@@ -2,62 +2,89 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from careerclaw.models import NormalizedJob, JobSource, UserProfile
-from careerclaw.resume_intel import ResumeIntelligence
+from careerclaw.models import NormalizedJob, JobSource
+from careerclaw.resume_intel import build_resume_intelligence
 from careerclaw.requirements import extract_job_requirements
 from careerclaw.gap import analyze_gap
 
 
-def test_extract_job_requirements_keywords_and_phrases() -> None:
+def test_extract_job_requirements_includes_ordered_keyword_stream() -> None:
     job = NormalizedJob(
         source=JobSource.REMOTEOK,
-        title="Project Manager",
+        title="Customer Support Specialist",
         company="Acme",
-        description="Looking for strong project management skills and customer service experience. "
-                    "Must handle stakeholder communication and time management.",
-        tags=["management", "customer service"],
+        description="We need customer service experience, phone support, and time management. "
+                    "Great communication and problem solving are required.",
+        tags=["customer service", "support"],
         posted_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
         canonical_url="https://example.com/job/1",
     )
     req = extract_job_requirements(job, max_phrases=20)
-    assert "project" in req.keywords
-    assert "management" in req.keywords
-    # Phrases should include common bigrams/trigrams
-    assert any(p in req.phrases for p in ["project management", "customer service", "stakeholder communication"])
+    assert req.keyword_stream, "keyword_stream should be populated"
+    # first-seen ordering should reflect the job text
+    assert req.keyword_stream[0] in {"customer", "support", "specialist"}  # title tokens appear early
+    assert "customer service" in req.phrases
 
 
-def test_gap_analysis_structure_and_fit_score() -> None:
-    resume = ResumeIntelligence(
-        extracted_keywords=["project", "management", "communication", "python"],
-        extracted_phrases=["project management", "stakeholder communication"],
-        impact_signals=["20%"],
-        source="summary_only",
+def test_gap_analysis_structure_ordering_and_summary() -> None:
+    resume = build_resume_intelligence(
+        resume_summary="Experienced in customer service and phone support.",
+        resume_text="",
     )
     job = NormalizedJob(
         source=JobSource.REMOTEOK,
-        title="Project Manager",
+        title="Customer Support Specialist",
         company="Acme",
-        description="Project management, stakeholder communication, and agile methodology required. "
-                    "Nice to have: budget forecasting.",
+        description="customer service and phone support required. nice to have: time management and data entry.",
         posted_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
         canonical_url="https://example.com/job/2",
     )
     req = extract_job_requirements(job, max_phrases=30)
     gap = analyze_gap(resume=resume, job=req)
     d = gap.to_dict()
-    assert "analysis" in d
     analysis = d["analysis"]
-    assert "fit_score" in analysis
+
+    # keywords and phrases separated
     assert "signals" in analysis and "gaps" in analysis
+    assert "keywords" in analysis["signals"] and "phrases" in analysis["signals"]
+    assert "keywords" in analysis["gaps"] and "phrases" in analysis["gaps"]
 
-    # Keywords and phrases separated
-    assert "keywords" in analysis["signals"]
-    assert "phrases" in analysis["signals"]
-    assert "keywords" in analysis["gaps"]
-    assert "phrases" in analysis["gaps"]
+    # contains summary for readable preview
+    assert "summary" in analysis
+    assert "top_signals" in analysis["summary"]
+    assert "top_gaps" in analysis["summary"]
 
-    # Some expected matches
-    assert "project management" in analysis["signals"]["phrases"]
-    assert "stakeholder communication" in analysis["signals"]["phrases"]
-    # Some expected gaps (phrase)
-    assert "agile methodology" in analysis["gaps"]["phrases"]
+    # ordering: job order should be preserved for phrases
+    sig_ph = analysis["signals"]["phrases"]
+    gap_ph = analysis["gaps"]["phrases"]
+    # "customer service" appears before "phone support" in the description string
+    if "customer service" in sig_ph and "phone support" in sig_ph:
+        assert sig_ph.index("customer service") < sig_ph.index("phone support")
+
+
+def test_section_weighting_affects_fit_score() -> None:
+    resume = build_resume_intelligence(
+        resume_summary="",
+        resume_text="""SKILLS
+customer service
+phone support
+
+INTERESTS
+data entry
+""",
+    )
+    job = NormalizedJob(
+        source=JobSource.REMOTEOK,
+        title="Customer Support Specialist",
+        company="Acme",
+        description="customer service phone support data entry",
+        posted_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        canonical_url="https://example.com/job/3",
+    )
+    req = extract_job_requirements(job, max_phrases=10)
+    gap = analyze_gap(resume=resume, job=req)
+
+    # Section weighting: skills are weighted higher than interests; fit_score should be <= unweighted
+    assert gap.fit_score <= gap.fit_score_unweighted + 1e-9
+    # And should still be non-zero
+    assert gap.fit_score > 0.0

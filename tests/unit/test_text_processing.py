@@ -45,3 +45,42 @@ def test_extract_phrases_bigrams_and_trigrams_are_stable() -> None:
 
     # deterministic ordering: first-seen bigram appears before later ones
     assert phrases.index("customer service") < phrases.index("project management")
+
+
+# ---------------------------------------------------------------------------
+# Phase-5E: recruitment boilerplate stopwords
+# ---------------------------------------------------------------------------
+
+def test_recruitment_process_terms_are_filtered() -> None:
+    """Recruitment process terms added in Phase-5E must not appear in token stream."""
+    text = (
+        "Please apply now. Qualified candidates will be interviewed. "
+        "We are hiring and onboarding applicants. Submit your application today."
+    )
+    stream = tokenize_stream(text)
+    for term in ("apply", "applying", "applicant", "applicants", "application",
+                 "applications", "submit", "submission", "candidate", "candidates",
+                 "qualified", "interview", "interviewing", "hire", "hiring",
+                 "onboard", "onboarding"):
+        assert term not in stream, f"Expected '{term}' to be filtered as stopword, but found it in stream"
+
+
+def test_recruitment_descriptor_terms_are_filtered() -> None:
+    """Generic recruitment descriptor noise must not appear in token stream."""
+    text = (
+        "Competitive salary package with benefits and opportunities. "
+        "We are seeking a responsible and successful candidate. Bonus nice to have."
+    )
+    stream = tokenize_stream(text)
+    for term in ("competitive", "opportunity", "opportunities", "benefit", "benefits",
+                 "package", "responsible", "seeking", "looking", "successful"):
+        assert term not in stream, f"Expected '{term}' to be filtered as stopword, but found it in stream"
+
+
+def test_technical_tokens_not_accidentally_filtered() -> None:
+    """Stopword expansion must not remove legitimate technical tokens."""
+    text = "Python TypeScript React AWS kubernetes terraform postgresql fastapi"
+    stream = tokenize_stream(text)
+    for term in ("python", "typescript", "react", "aws", "kubernetes", "terraform",
+                 "postgresql", "fastapi"):
+        assert term in stream, f"Expected technical token '{term}' to survive stopword filtering"
