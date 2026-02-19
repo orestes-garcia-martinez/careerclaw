@@ -17,7 +17,9 @@ from careerclaw.tracking import JsonTrackingRepository, TrackingRepository, defa
 from careerclaw.io.resume_loader import load_resume_text
 from careerclaw.resume_intel import build_resume_intelligence, cache_resume_intelligence, resume_intelligence_to_dict, ResumeIntelligence
 from careerclaw.requirements import extract_job_requirements
-from careerclaw.gap import analyze_gap
+from careerclaw.gap import GapAnalysis, analyze_gap
+from careerclaw import config
+from careerclaw.llm.enhancer import LLMDraftEnhancer, DraftEnhancerError
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,7 @@ class RankedMatch:
     score: float
     explanation: Dict[str, Any]  # mapped from MatchBreakdown.details
     analysis: Dict[str, Any] | None = None
+    gap: GapAnalysis | None = None  # raw object for LLM prompt builder
 
 
 @dataclass(frozen=True)
@@ -55,7 +58,7 @@ class DailyBriefingResult:
                 }
                 for m in self.top_matches
             ],
-            "drafts": [{"job_id": d.job_id, "channel": d.channel, "draft": d.draft} for d in self.drafts],
+            "drafts": [{"job_id": d.job_id, "channel": d.channel, "draft": d.draft, "enhanced": d.enhanced} for d in self.drafts],
             "tracking": {
                 "created": self.tracking_created,
                 "already_present": self.tracking_already_present,
@@ -104,6 +107,7 @@ def run_daily_briefing(
         repo: Optional[TrackingRepository] = None,
         dry_run: bool = False,
         resume_intel: Optional[ResumeIntelligence] = None,
+        no_enhance: bool = False,
 ) -> DailyBriefingResult:
     """
     Skill-first the entry point:
@@ -124,20 +128,58 @@ def run_daily_briefing(
 
     matches: List[RankedMatch] = []
     for item in ranked:
+        gap_obj = None
         analysis = None
         if resume_intel is not None:
             req = extract_job_requirements(item.job)
-            analysis = analyze_gap(resume=resume_intel, job=req).to_dict().get("analysis")
+            gap_obj = analyze_gap(resume=resume_intel, job=req)
+            analysis = gap_obj.to_dict().get("analysis")
         matches.append(
             RankedMatch(
                 job=item.job,
                 score=float(item.score),
                 explanation=item.breakdown.details,
                 analysis=analysis,
+                gap=gap_obj,
             )
         )
 
-    drafts = [draft_outreach(profile=profile, job=m.job) for m in matches]
+    # --- Draft generation (deterministic baseline + optional LLM enhancement) ---
+    use_llm = (
+            not no_enhance
+            and config.llm_configured()
+            and resume_intel is not None
+    )
+
+    enhancer = None
+    if use_llm:
+        try:
+            enhancer = LLMDraftEnhancer(
+                api_key=config.CAREERCLAW_LLM_KEY,
+                provider=config.CAREERCLAW_LLM_PROVIDER,
+                resume=resume_intel,
+            )
+        except Exception:
+            enhancer = None  # fall back silently
+
+    drafts: List[DraftResult] = []
+    for m in matches:
+        base = draft_outreach(profile=profile, job=m.job)
+        if enhancer is not None and m.gap is not None:
+            try:
+                enhanced_text = enhancer.enhance(job=m.job, gap=m.gap)
+                # Prepend subject line from deterministic draft (first line)
+                subject_line = base.draft.split("\n")[0]
+                full_draft = subject_line + "\n\n" + enhanced_text
+                from careerclaw.drafting import DraftResult as DR
+                drafts.append(DR(job_id=m.job.job_id, draft=full_draft, enhanced=True))
+            except Exception:
+                # Any failure: fall back to deterministic, log warning
+                import sys
+                print("[CareerClaw] LLM enhancement failed for one draft, using deterministic fallback.", file=sys.stderr)
+                drafts.append(base)
+        else:
+            drafts.append(base)
 
     tracking_created = 0
     tracking_already = 0
@@ -237,7 +279,8 @@ def print_human_summary(result: DailyBriefingResult, profile: UserProfile, *, an
 
     print("\nDrafts:")
     for idx, d in enumerate(result.drafts, start=1):
-        print(f"\n--- Draft #{idx} (job_id={d.job_id}) ---")
+        tag = " [LLM enhanced]" if d.enhanced else ""
+        print(f"\n--- Draft #{idx} (job_id={d.job_id}){tag} ---")
         print(d.draft)
 
 
@@ -284,6 +327,7 @@ def main() -> None:
     parser.add_argument("--resume-text", type=str, default="", help="Optional path to resume .txt")
     parser.add_argument("--resume-pdf", type=str, default="", help="Optional path to resume .pdf")
     parser.add_argument("--analysis", choices=["off","summary","full"], default="summary", help="Gap analysis output in CLI (off|summary|full)")
+    parser.add_argument("--no-enhance", action="store_true", help="Force deterministic drafts even when CAREERCLAW_LLM_KEY is set")
     args = parser.parse_args()
 
     profile: UserProfile
@@ -302,11 +346,11 @@ def main() -> None:
             profile = _load_profile_from_json(default_path)
         else:
             profile = UserProfile(
-                skills=["react", "typescript", "python", "aws", "observability"],
-                target_roles=["frontend engineer", "software engineer", "platform engineer"],
-                experience_years=8,
+                skills=["communication", "problem solving", "teamwork"],
+                target_roles=["your target role here"],
+                experience_years=5,
                 work_mode="remote",
-                resume_summary="Senior software engineer focused on systems thinking, reliability, and user experience.",
+                resume_summary="Experienced professional with a strong track record of delivering results.",
             )
 
 
@@ -337,6 +381,7 @@ def main() -> None:
         top_k=args.top_k,
         dry_run=args.dry_run,
         resume_intel=intel,
+        no_enhance=args.no_enhance,
     )
 
     if args.json:

@@ -33,6 +33,10 @@ _STOPWORDS = {
     "competitive", "opportunity", "opportunities", "benefit", "benefits", "package",
     "responsible", "seeking", "looking", "welcome", "encouraged",
     "bonus", "nice", "have",
+    # URL noise — appear in resume headers (LinkedIn, GitHub links) and HN posts
+    "https", "http", "www",
+    # Contact info noise from resume headers
+    "linkedin", "github", "gmail",
 }
 
 
