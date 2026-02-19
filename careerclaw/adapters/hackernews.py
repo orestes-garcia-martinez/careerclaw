@@ -177,7 +177,12 @@ def _best_effort_parse_header(text: str) -> Tuple[str, str, Optional[str]]:
     location: Optional[str] = None
 
     if parts:
-        company = parts[0] if len(parts[0]) <= 80 else parts[0][:80]
+        # Strip leading URLs from the first segment (some HN posts start with https://...)
+        first = re.sub(r"https?://\S+\s*", "", parts[0]).strip()
+        # If stripping the URL leaves nothing, try the next segment or fall back to Unknown
+        if not first and len(parts) > 1:
+            first = re.sub(r"https?://\S+\s*", "", parts[1]).strip()
+        company = (first if first else "Unknown")[:80]
 
         # Identify location-ish tokens
         location = _pick_location(parts[1:]) if len(parts) > 1 else None
@@ -247,7 +252,15 @@ def _pick_role(parts: List[str]) -> Optional[str]:
     for p in parts:
         pl = p.lower()
         if any(k in pl for k in role_keywords):
-            # Keep it short and role-like
-            return p[:120]
+            # Strip leading URLs before returning (e.g. "https://doowii.io Senior Engineer")
+            clean = re.sub(r"https?://\S+\s*", "", p).strip()
+            if not clean:
+                continue
+            # Skip segments that are too long to be a real role title —
+            # long segments after URL-stripping are usually company descriptions,
+            # not role titles (e.g. "Doowii is building an AI operating layer...")
+            if len(clean) > 80:
+                continue
+            return clean[:120]
 
     return None

@@ -16,7 +16,8 @@ class DraftEnhancer(Protocol):
 class DraftResult:
     job_id: str
     draft: str
-    channel: str = "email"  # MVP default
+    channel: str = "email"   # MVP default
+    enhanced: bool = False   # True when produced by LLMDraftEnhancer
 
 
 def _pick_relevant_skills(profile: UserProfile, job: NormalizedJob, max_skills: int = 4) -> list[str]:
@@ -70,14 +71,14 @@ def draft_outreach(
 
 Hi {company} team,
 
-I’m reaching out to express interest in the {title} role. I have {profile.experience_years}+ years of experience and a strong focus on building reliable, user-centered systems.
+I'm reaching out to express interest in the {title} role. I have {profile.experience_years}+ years of experience and a strong track record of delivering results in my field.
 
 From the posting, it looks like you’re looking for someone with experience in {skills_line}. That aligns well with my background, including:
-- Delivering production-ready features with strong ownership and attention to reliability
-- Writing clear, maintainable code and collaborating closely with stakeholders
-- Diagnosing issues quickly and improving systems through good instrumentation and feedback loops
+- Delivering high-quality work with strong ownership and attention to outcomes
+- Communicating clearly and collaborating effectively with colleagues and stakeholders
+- Identifying problems quickly and following through with practical, lasting solutions
 
-If helpful, I can share a brief summary of relevant work and walk through how I’d approach the first 30 days in this role. Thanks for your time — I’d love to connect.
+If helpful, I can share a brief summary of relevant work and walk through how I'd approach the first 30 days in this role. Thanks for your time — I'd welcome the chance to connect.
 
 Best regards,
 [Your Name]
