@@ -1,213 +1,365 @@
 # CareerClaw
 
-AI-powered job search assistant for OpenClaw.
+**AI-powered job search automation for OpenClaw.**
 
-CareerClaw turns your agent into a structured career workflow:
+CareerClaw turns your AI agent into a structured job search workflow:
+fetch listings → rank matches → draft outreach → track applications.
 
-Daily Shortlist → Ranked Matches → Draft Message → Track Status
-
----
-
-## 🚧 Status
-
-MVP in development (v0.1.x)
-
-- End-to-end Daily Briefing orchestration
-- Profile-driven ranking
-- Draft generation
-- Persistent tracking
-- Run instrumentation
-
-Sources:
-- RemoteOK RSS
-- Hacker News “Who’s Hiring”
+Works for any profession. No job board account is required. All data stays
+on your machine.
 
 ---
 
-## 🎯 MVP Goal
+## How It Works
 
-Validate:
+1. **Fetches** job listings from RemoteOK and Hacker News Who's Hiring
+2. **Ranks** them against your profile using keyword overlap, experience
+   alignment, salary fit, and work-mode preference
+3. **Drafts** a tailored outreach email for each top match
+4. **Tracks** your application pipeline in a local JSON file
 
-1. Install demand
-2. Weekly repeat usage
-3. Pro-tier upgrade interest
+One command. Everything local.
 
 ---
 
-## 🧱 Architecture Overview
+## Quickstart
 
-CareerClaw is structured into:
+### 1. Install
 
-- **Adapters** (source ingestion)
-- **Normalized Job Schema**
-- **Deterministic Matching Engine**
-- **Drafting Layer**
-- **Tracking Repository**
-- **Daily Briefing Orchestrator**
+```bash
+git clone https://github.com/orestes-garcia-martinez/careerclaw
+cd careerclaw
+python -m venv .venv
 
-Entry point:
-```powershell
-python -m careerclaw.briefing
+# Activate (macOS/Linux)
+source .venv/bin/activate
+
+# Activate (Windows PowerShell)
+.\.venv\Scripts\Activate
+
+# Install with dev dependencies
+pip install -e ".[dev]"
 ```
 
-Optional flags (Phase 5):
-```powershell
-# Provide resume text/PDF (txt takes precedence if both provided)
-python -m careerclaw.briefing --resume-text .\resume.txt
-python -m careerclaw.briefing --resume-pdf  .\resume.pdf
+### 2. Set up via OpenClaw (recommended)
 
-# Control CLI gap-analysis verbosity
-python -m careerclaw.briefing --analysis summary   # default (fit + highlights)
-python -m careerclaw.briefing --analysis full      # prints matched/missing lists (bounded)
-python -m careerclaw.briefing --analysis off       # hides gap-analysis output in CLI
+If you are running CareerClaw through OpenClaw/ClawHub, the agent will
+guide you through setup automatically. Provide your resume and it will
+create your profile, ask two questions (work mode and salary), and run
+your first briefing.
 
-# Machine-readable output (includes per-match analysis.fit_score + signals/gaps)
-python -m careerclaw.briefing --json
+### 3. Set up manually
+
+Create the runtime directory and your profile:
+
+```bash
+mkdir -p .careerclaw
 ```
 
-Notes:
-- `analysis.fit_score` is deterministic and **section-aware** (Skills/Summary/Experience > Interests).
-- `analysis.fit_score_unweighted` is included for regression checking and interpretability.
+Create `.careerclaw/profile.json`:
 
-
----
-
-## 📊 Success Metrics (30-Day Target)
-- ≥ 100 installs
-- ≥ 20 weekly active users
-- ≥ 30% of active users run briefing 2+ times
-- ≥ 5 paid upgrade inquiries
-
----
-
-## 🔐 Security Principles
-- Minimal permission model
-- No credential storage
-- Signed commits
-- Transparent source code
-- Versioned releases
-- Local-only runtime state
-
----
-
-## 🧪 Development
-
-## ⚙️ Installation (Recommended)
-
-Create a virtual environment (PowerShell):
-```powershell
-    python -m venv .venv
-    .\.venv\Scripts\Activate
-```
-
-
-Install in editable mode with dev dependencies:
-```powershell
-    python -m pip install -e ".[dev]"
-```
-
-This ensures:
-- Proper package imports
-- Editable source linkage
-- pytest works reliably
-
----
-
-## 👤 Profile Setup
-Create a runtime directory:
-```powershell
-    mkdir .careerclaw
-```
-
-Create .careerclaw/profile.json
-Example:
 ```json
-    {
-      "version": 1,
-      "user_id": "orestes",
-      "skills": ["react", "typescript", "python", "aws", "observability"],
-      "target_roles": ["frontend engineer", "software engineer"],
-      "experience_years": 8,
-      "work_mode": "remote",
-      "resume_summary": "Senior engineer focused on systems thinking and reliability.",
-      "location": "United States",
-      "salary_min": 140000,
-      "salary_max": 190000
-    }
+{
+  "skills": ["python", "react", "sql"],
+  "target_roles": ["data analyst", "backend engineer"],
+  "experience_years": 5,
+  "work_mode": "remote",
+  "resume_summary": "Experienced analyst with 5 years delivering data pipelines and dashboards.",
+  "location": "Austin, TX",
+  "salary_min": 90000
+}
 ```
 
-Run Daily Briefing:
-```powershell
-    python -m careerclaw.briefing   
-    python -m careerclaw.briefing --dry-run
-    python -m careerclaw.briefing --json --dry-run
-    python -m careerclaw.briefing --profile ..careerclaw\profile.json --top-k 3
+### 4. Run your first briefing
+
+```bash
+# Dry run first — no files written, safe to preview
+python -m careerclaw.briefing --dry-run
+
+# With your resume for better match quality (recommended)
+python -m careerclaw.briefing --resume-pdf .careerclaw/resume.pdf --dry-run
+
+# Full run when you're happy with the results
+python -m careerclaw.briefing --resume-pdf .careerclaw/resume.pdf
 ```
-
-## 📂 Runtime Artifacts
-Stored locally under:
-.careerclaw/
-
-Files:
-- profile.json — user configuration
-- tracking.json — saved jobs (deduped)
-- runs.jsonl — append-only run log (analytics stream)
 
 ---
 
-## 🧪 Testing
-Run tests:
-```powershell
-pytest
+## Sample Output
+
+```
+=== CareerClaw Daily Briefing ===
+User: local-user
+Fetched jobs: 244 | After dedupe: 244
+Duration: 29482ms
+
+Top Matches:
+
+1) Senior Engineer (Full-Stack) @ Ezra – LATAM REMOTE ONLY  [hn_who_is_hiring]
+   score: 0.775 | fit: 41%
+   highlights: senior engineer, python, react
+   matches: react, python, aws
+
+2) Senior Software Engineer @ Count – REMOTE (UK/Europe/US East Coast)  [hn_who_is_hiring]
+   score: 0.725 | fit: 28%
+   highlights: senior, engineer
+   matches: typescript, python, react
+
+3) Data Infrastructure Engineer @ Stripe – REMOTE  [remoteok]
+   score: 0.710 | fit: 35%
+   highlights: python, sql, data pipelines
+   matches: python, sql, aws
+
+Drafts:
+
+--- Draft #1 ---
+Subject: Interest in Senior Engineer (Full-Stack) at Ezra
+
+Hi Ezra team,
+
+I'm reaching out to express interest in the Senior Engineer (Full-Stack)
+role. I have 5 years of experience delivering production systems...
 ```
 
-Run smoke test (live sources):
-- python -m scripts.smoke_test_sources
+---
+
+## Free vs Pro
+
+| Feature                                       | Free | Pro         |
+|-----------------------------------------------|------|-------------|
+| Job ingestion (RemoteOK + HN)                 | ✅    | ✅           |
+| Top 3 matches with score breakdown            | ✅    | ✅           |
+| Outreach email draft (deterministic)          | ✅    | ✅           |
+| Application tracking (local JSON)             | ✅    | ✅           |
+| Manual briefing trigger                       | ✅    | ✅           |
+| JSON output for agent integration             | ✅    | ✅           |
+| Gap analysis (matched vs missing skills)      | ❌    | ✅           |
+| LLM-enhanced outreach (your API key)          | ❌    | ✅           |
+| Resume intelligence (section-aware weighting) | ❌    | ✅           |
+| Scheduled / automated daily briefings         | ❌    | ✅ (roadmap) |
+| Additional job sources                        | ❌    | ✅ (roadmap) |
+| CSV / Sheets export                           | ❌    | ✅ (roadmap) |
+
+**Pro tier: $39–49 one-time.** Sold off-platform. Contact:
+orestes.garcia.martinez@gmail.com
 
 ---
 
-## 📌 License
+## Pro: LLM-Enhanced Drafts
 
-TBD — will be added before public release.
+When `CAREERCLAW_LLM_KEY` is set, each top match receives an
+LLM-enhanced outreach email that references your specific resume signals
+and the job's requirements. Falls back to the deterministic template
+silently if the call fails.
+
+```bash
+# Anthropic (default — uses claude-sonnet-4-6)
+export CAREERCLAW_LLM_KEY=sk-ant-...
+python -m careerclaw.briefing --resume-pdf .careerclaw/resume.pdf
+
+# OpenAI (uses gpt-4o-mini)
+export CAREERCLAW_LLM_KEY=sk-...
+export CAREERCLAW_LLM_PROVIDER=openai
+python -m careerclaw.briefing --resume-pdf .careerclaw/resume.pdf
+
+# Override the model
+export CAREERCLAW_LLM_MODEL=claude-haiku-4-5-20251001
+```
+
+Estimated cost per run: ~$0.018 at claude-sonnet-4-6 pricing with your
+own key.
 
 ---
 
-## Module dependency layering (Phase 5)
+## All CLI Options
 
-CareerClaw is structured in layers to keep Phase-5 additions stable and avoid circular imports.
+```bash
+python -m careerclaw.briefing [OPTIONS]
 
-**Dependency rule:** higher layers may depend on lower layers, but not vice-versa.
+Options:
+  --profile PATH        Path to profile.json (default: .careerclaw/profile.json)
+  --resume-text PATH    Plain text resume file (.txt)
+  --resume-pdf PATH     PDF resume file (.pdf)
+  --top-k INT           Number of top matches to return (default: 3)
+  --dry-run             Run without writing tracking or run log
+  --json                Print JSON output only (machine-readable)
+  --analysis MODE       Gap analysis verbosity: off | summary | full (default: summary)
+  --no-enhance          Force deterministic drafts even when LLM key is set
+  --user-id STRING      User identifier for run tracking (default: local-user)
+```
 
-### Layers
+---
 
-1) **Core (infrastructure)**
-   - `careerclaw/core/*`
-   - Shared text processing, normalization, small utilities.
-   - **Must not import** from matching, briefing, adapters, tracking, or I/O.
+## Application Tracking
 
-2) **Domain logic**
-   - `careerclaw/matching/*` (ranking + scoring)
-   - `careerclaw/resume_intel.py` (resume intelligence)
-   - Future: requirements extraction, gap analysis
-   - May import from `careerclaw/core/*`
-   - Should not import from CLI orchestration or external adapters.
+Tracking is written automatically on each non-dry-run. Status options:
 
-3) **I/O + adapters**
-   - `careerclaw/adapters/*` (RemoteOK, HN)
-   - `careerclaw/io/*` (resume loaders, file utilities)
-   - May import from `careerclaw/core/*` and `careerclaw/models.py`
+`saved` → `applied` → `interview` → `rejected`
 
-4) **Persistence**
-   - `careerclaw/tracking.py`
-   - Local repository I/O (`.careerclaw/` runtime artifacts)
-   - May import from models/core only
+Runtime files — all stored under `.careerclaw/` (gitignored by default):
 
-5) **Orchestration / CLI**
-   - `careerclaw/briefing.py`
-   - Composes the pipeline: fetch → dedupe → rank → draft → persist → output
-   - May import from all lower layers, but **nothing should import briefing**.
+| File                        | Contents                               |
+|-----------------------------|----------------------------------------|
+| `profile.json`              | Your profile                           |
+| `resume.txt` / `resume.pdf` | Your resume                            |
+| `tracking.json`             | Saved jobs keyed by stable `job_id`    |
+| `runs.jsonl`                | Append-only run log (one line per run) |
+| `resume_intel.json`         | Cached resume intelligence             |
 
-### Why tokenization lives in `careerclaw/core`
+---
 
-Tokenization is used across matching and Phase-5 resume intelligence. Placing it in `careerclaw/core/text_processing.py`
-makes it shared infrastructure and prevents coupling Phase-5 features to the matching package.
+## Match Scores Explained
+
+CareerClaw scores each job on four dimensions:
+
+| Dimension            | Weight | What it measures                                             |
+|----------------------|--------|--------------------------------------------------------------|
+| Keyword overlap      | 50%    | Skills and role terms shared between job and profile         |
+| Experience alignment | 20%    | Your years vs job requirements                               |
+| Salary alignment     | 15%    | Your minimum vs the posted range (neutral if no salary data) |
+| Work-mode match      | 15%    | Remote/onsite/hybrid preference match                        |
+
+**`score`** is the composite (0.0–1.0). **`fit`** is the resume-to-job
+overlap percentage from gap analysis — it requires a resume file to be
+meaningful. Fit scores of 40%+ are strong; the practical ceiling against
+real job postings is ~50% due to company names and location tokens in
+the denominator.
+
+---
+
+## HN Thread ID — Monthly Update
+
+The Hacker News "Who is Hiring?" thread is posted on the first weekday
+of each month. Update the ID in `careerclaw/config.py` to get fresh
+listings:
+
+```python
+HN_WHO_IS_HIRING_THREAD_ID = 46857488  # Update monthly
+```
+
+Find the current thread: search `site:news.ycombinator.com "who is hiring"`
+and copy the numeric ID from the URL.
+
+---
+
+## Architecture
+
+```
+profile.json + resume file
+        │
+        ▼
+fetch_all_jobs()          ← RemoteOK RSS + HN Firebase API
+        │
+        ▼
+deduplicate()             ← stable job_id hash
+        │
+        ▼
+rank_jobs()               ← keyword + experience + salary + work-mode
+        │
+        ▼
+build_resume_intelligence()   ← section-aware keyword extraction
+gap_analysis()                ← matched vs missing signals
+        │
+        ▼
+draft_outreach()          ← deterministic template (Free)
+llm_enhance()             ← LLM email via your API key (Pro)
+        │
+        ▼
+persist_tracking()        ← tracking.json + runs.jsonl
+        │
+        ▼
+output bundle             ← console summary + JSON payload
+```
+
+**Module layers** (higher layers may import lower, never the reverse):
+
+1. `careerclaw/core/` — text processing, shared utilities
+2. `careerclaw/matching/`, `careerclaw/resume_intel.py` — domain logic
+3. `careerclaw/adapters/`, `careerclaw/io/` — I/O and source adapters
+4. `careerclaw/tracking.py` — persistence
+5. `careerclaw/briefing.py` — pipeline orchestration and CLI entry point
+
+---
+
+## Development
+
+### Running tests
+
+```bash
+# All unit and integration tests (offline, no network)
+python -m pytest -q
+
+# Live smoke test (requires network — run before releases)
+python -m scripts.smoke_test_sources
+```
+
+### Project structure
+
+```
+careerclaw/
+├── adapters/          # RemoteOK RSS + HN Firebase adapters
+├── core/              # Shared text processing
+├── io/                # Resume loaders (txt + PDF)
+├── llm/               # LLM draft enhancer (Pro)
+├── matching/          # Scoring engine
+├── briefing.py        # Pipeline orchestrator + CLI entry point
+├── config.py          # Environment and source configuration
+├── drafting.py        # Deterministic draft templates
+├── gap.py             # Gap analysis engine
+├── models.py          # Canonical data schemas
+├── requirements.py    # Job requirements extraction
+├── resume_intel.py    # Resume intelligence
+├── sources.py         # Source aggregation
+└── tracking.py        # Tracking repository
+docs/
+├── architecture.md
+└── data-schema.md
+tests/
+├── contract/          # Adapter contract tests (offline fixtures)
+├── fixtures/          # Test data
+└── unit/              # Unit and integration tests
+```
+
+---
+
+## Security & Privacy
+
+CareerClaw is built on a local-first architecture. Your data never
+leaves your machine unless you configure an LLM key.
+
+- **No backend.** No telemetry. No analytics endpoint.
+- **No credential storage.** API keys are read from environment
+  variables at runtime and never written to disk or logs.
+- **No PII transmission.** Your resume, profile, and application history
+  are stored only in `.careerclaw/` on your local machine.
+- **External calls:** `remoteok.com` (RSS, no auth) and
+  `hacker-news.firebaseio.com` (public API, no auth) only.
+- **LLM calls** go directly to your configured provider (Anthropic or
+  OpenAI) using your own key — no CareerClaw server in the middle.
+- **VirusTotal clean** on every release.
+
+See [SECURITY.md](SECURITY.md) for the vulnerability disclosure policy.
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+Current version: **v0.4.3**
+
+---
+
+## License
+
+- **Free tier:** MIT License — see [LICENSE](LICENSE)
+- **Pro tier:** Commercial license
+
+---
+
+## Support
+
+- **GitHub Issues:** for bug reports and feature requests
+- **Response SLA:** critical bugs < 48h · general questions < 72h
+- **Security disclosures:** see [SECURITY.md](SECURITY.md)
+- **Pro inquiries:** orestes.garcia.martinez@gmail.com
