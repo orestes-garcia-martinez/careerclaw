@@ -1,5 +1,7 @@
 # CareerClaw
 
+[![CI](https://github.com/orestes-garcia-martinez/careerclaw/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/orestes-garcia-martinez/careerclaw/actions/workflows/ci.yml)
+
 **AI-powered job search automation for OpenClaw.**
 
 CareerClaw turns your AI agent into a structured job search workflow:
