@@ -1,0 +1,85 @@
+# openclaw.yml
+#
+# OpenClaw agent configuration for local CareerClaw testing.
+# Place this file at the repo root. OpenClaw reads it automatically when
+# the gateway starts (mounted via the openclaw-config volume or passed via CLI).
+#
+# Sandbox model:
+#   - Gateway runs on host (via Docker)
+#   - All agent tool execution happens inside the custom careerclaw-sandbox image
+#   - Workspace access is rw so the skill can read profile.json and write tracking.json
+#   - Network is bridge — outbound internet allowed for job source fetching
+
+agents:
+  defaults:
+    sandbox:
+      # non-main: isolate all sessions except the admin/control session
+      mode: "non-main"
+      # agent: one container per agent session (not shared across sessions)
+      scope: "agent"
+      # rw: skill needs to read .careerclaw/profile.json and write tracking.json
+      workspaceAccess: "rw"
+      workspaceRoot: "/workspace"
+
+      docker:
+        # Custom image built by Dockerfile.sandbox (Python 3.12 + CareerClaw)
+        image: "careerclaw-sandbox:local"
+        workdir: "/workspace"
+
+        # Security hardening — keep attack surface minimal
+        readOnlyRoot: true
+        tmpfs:
+          - "/tmp"
+          - "/var/tmp"
+          - "/run"
+        capDrop:
+          - "ALL"
+        user: "1000:1000"
+
+        # bridge network: allows outbound internet (remoteok.com, hacker-news.firebaseio.com)
+        # Change to "none" if you want to test purely offline (fetchers will fail gracefully)
+        network: "bridge"
+
+        # Public DNS for job source resolution
+        dns:
+          - "1.1.1.1"
+          - "8.8.8.8"
+
+        # Resource limits — keep the sandbox lean
+        memory: "512m"
+        memorySwap: "512m"
+        cpus: 1
+        pidsLimit: 128
+        ulimits:
+          nofile:
+            soft: 1024
+            hard: 2048
+
+        # Environment vars forwarded from the gateway into the sandbox
+        env:
+          CAREERCLAW_LLM_KEY: "${CAREERCLAW_LLM_KEY}"
+          CAREERCLAW_LLM_PROVIDER: "${CAREERCLAW_LLM_PROVIDER:-anthropic}"
+          CAREERCLAW_LLM_MODEL: "${CAREERCLAW_LLM_MODEL:-}"
+
+      # Auto-prune idle containers after 1 hour to keep Docker clean
+      prune:
+        idleHours: 1
+        maxAgeDays: 1
+
+  # Named agent for CareerClaw — the agent the OpenClaw gateway will route to
+  list:
+    - name: "careerclaw"
+      description: "CareerClaw job search agent (local test)"
+      sandbox:
+        mode: "all"                    # always sandbox this agent
+        workspaceAccess: "rw"
+      tools:
+        allow:
+          - "exec"                     # run python -m careerclaw.briefing
+          - "read"                     # read profile.json, resume files
+          - "write"                    # write tracking.json, runs.jsonl
+          - "web_fetch"                # fetch RemoteOK RSS + HN API
+        deny:
+          - "browser"                  # no browser automation needed
+          - "camera"
+          - "canvas"

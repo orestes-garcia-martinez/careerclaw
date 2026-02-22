@@ -1,0 +1,69 @@
+# docker-compose.yml
+#
+# Local test environment for CareerClaw + OpenClaw agent.
+# For local development/testing only — not part of ClawHub publication.
+#
+# Usage:
+#   First run:  ./docker-setup.sh   (from the official openclaw repo)
+#   Then:       docker compose up -d openclaw-gateway
+#   CLI:        docker compose run --rm openclaw-cli <command>
+#
+# Requires:
+#   - Docker Desktop with WSL2 backend
+#   - .env file at repo root (copy from .env.example and fill in values)
+#   - Official OpenClaw repo cloned separately to build the base sandbox image
+#
+# Isolation contract:
+#   - Gateway and agent sandbox run in Docker — zero access to Windows host
+#   - Only .careerclaw/ is mounted (rw) — your source code is baked into the image
+#   - Network: bridge — outbound internet allowed (RemoteOK + HN API), no host access
+
+services:
+  openclaw-gateway:
+    image: openclaw:local              # built by openclaw's own docker-setup.sh
+    container_name: openclaw-gateway
+    restart: unless-stopped
+    ports:
+      - "18789:18789"                  # Control UI — http://localhost:18789
+    volumes:
+      # OpenClaw config (memory, channel tokens, agent settings)
+      - openclaw-config:/home/node/.openclaw
+      # CareerClaw runtime data — the ONLY host path exposed to the agent.
+      # Path is relative to this compose file (docker/), so ../ = repo root.
+      - type: bind
+        source: ../.careerclaw
+        target: /workspace/.careerclaw
+        read_only: false
+    environment:
+      # OpenClaw gateway token — set in .env (never commit)
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      # Telegram bot token — set in .env after creating bot via @BotFather
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      # Anthropic API key — powers the OpenClaw agent itself
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # CareerClaw env vars — forwarded into the agent sandbox
+      CAREERCLAW_LLM_KEY: ${CAREERCLAW_LLM_KEY:-}
+      CAREERCLAW_LLM_PROVIDER: ${CAREERCLAW_LLM_PROVIDER:-anthropic}
+      CAREERCLAW_LLM_MODEL: ${CAREERCLAW_LLM_MODEL:-}
+    networks:
+      - openclaw-net
+
+  openclaw-cli:
+    image: openclaw:local
+    container_name: openclaw-cli
+    profiles: ["cli"]                  # only starts when explicitly requested
+    volumes:
+      - openclaw-config:/home/node/.openclaw
+    environment:
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+    networks:
+      - openclaw-net
+    entrypoint: ["node", "openclaw.mjs"]
+
+volumes:
+  openclaw-config:
+    name: careerclaw-openclaw-config   # named so it survives compose down
+
+networks:
+  openclaw-net:
+    driver: bridge                     # bridge = outbound internet, no host access
