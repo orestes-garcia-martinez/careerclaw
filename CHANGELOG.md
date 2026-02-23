@@ -5,7 +5,28 @@ All notable changes to this project will be documented in this file.
 The format follows Keep a Changelog and Semantic Versioning.
 
 ---
-## [Unreleased]
+## [0.5.0] - 2026-02-22
+
+### Added
+- `Dockerfile.sandbox` extending `openclaw-sandbox:bookworm-slim` with
+  Python 3.12, CareerClaw, `anthropic`, and `openai` for isolated local
+  agent testing.
+- `docker/docker-compose.yml` wiring the OpenClaw gateway and CareerClaw
+  sandbox with controlled `.careerclaw/` volume mount and bridge network.
+- `docker/openclaw.yml` agent sandbox configuration (mode, tools,
+  workspace access).
+- `.env.example` documenting all required environment variables.
+- `DOCKER.md` step-by-step local setup guide covering WSL2, Docker
+  Desktop, Telegram bot creation, volume permissions, and sandbox env
+  var configuration.
+
+### Changed
+- `SKILL.md`: Added "Presenting Results to the User" section instructing
+  the agent to always label outreach drafts as email drafts, show a
+  one-sentence summary per draft in chat interfaces, offer to display
+  the full email on request, indicate LLM-enhanced vs template status
+  per draft, and confirm dry-run vs real run at the end of every
+  briefing.
 
 ---
 

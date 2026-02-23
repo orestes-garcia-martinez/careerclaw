@@ -1,0 +1,34 @@
+# Dockerfile.sandbox
+#
+# Extends the official OpenClaw sandbox base image with Python 3.12 and
+# CareerClaw installed. Used ONLY for local testing — not part of the
+# ClawHub publication flow.
+#
+# Build via docker-compose (see docker-compose.yml). Do not build directly.
+
+FROM openclaw-sandbox:bookworm-slim
+
+# Install Python + pip as root, then drop back to the non-root node user
+USER root
+
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-venv \
+        python3-pip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CareerClaw from the workspace mount (read-only source).
+# The workspace is mounted at /workspace at runtime; we install it here
+# at build time by copying only what pip needs (pyproject.toml + package).
+# Using --break-system-packages because we are in a throwaway container.
+COPY careerclaw/ /tmp/careerclaw-src/careerclaw/
+COPY pyproject.toml /tmp/careerclaw-src/
+RUN pip install --break-system-packages --no-cache-dir /tmp/careerclaw-src \
+        anthropic \
+        openai && \
+    rm -rf /tmp/careerclaw-src
+
+# Drop back to the non-root user the base image expects
+USER node

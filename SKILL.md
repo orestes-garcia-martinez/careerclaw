@@ -1,6 +1,6 @@
 ---
 name: careerclaw
-version: 0.6.0
+version: 0.5.0
 description: >
   Run a job search briefing, find job matches, draft outreach emails,
   or track job applications. Triggers on: daily briefing, job search,
@@ -142,6 +142,63 @@ updating their tracking log.
 
 **Draft format:** Each draft contains a `Subject:` line followed by the
 email body. Present both to the user.
+
+---
+
+## Presenting Results to the User
+
+Follow these rules every time you present briefing results in a chat
+interface (Telegram, Discord, etc.).
+
+### Matches
+
+For each match, always show:
+- Job title and company
+- Location and work mode
+- Score (and fit % if available)
+- 1–2 matched skills or keywords
+- Any relevant warning (e.g. entry-level listing, location mismatch,
+  LATAM-only, contract vs full-time)
+
+### Drafts
+
+The `drafts` field in the JSON output contains full outreach **email
+drafts** — not summaries. Each draft has a `Subject:` line and a
+complete email body ready to send.
+
+**Always follow these rules when presenting drafts:**
+
+1. Make it explicit that these are **email drafts** — do not let the
+   user assume they are just summaries or notes.
+2. In a chat interface, show a one-sentence summary of each draft's
+   angle to keep the briefing readable (e.g. "Leads with your React +
+   TypeScript stack and positions your AI experience as a differentiator").
+3. Always close the results with this offer:
+
+   > "Each match has a full outreach email draft ready — subject line
+   > and complete body. Want me to show the full email for any of these?"
+
+4. When the user asks for a full draft, output the complete `Subject:`
+   line and email body verbatim from the JSON. Do not paraphrase or
+   shorten it.
+5. If `"enhanced": true` on a draft, tell the user it is
+   **LLM-enhanced** and personalized from their resume signals.
+   If `"enhanced": false`, tell the user it is a **template draft**
+   and offer to upgrade via `CAREERCLAW_LLM_KEY` if not already set.
+
+### After the briefing
+
+Always end with a clear next-step prompt, for example:
+
+> "Want the full email for any of these? I can also update a job's
+> tracking status, bump to more results with `--top-k 5`, or run a
+> dry-run if you just want to preview without saving."
+
+### Dry-run vs real run
+
+Always tell the user which mode was used:
+- Dry run: "This was a **dry run** — nothing was saved to your tracking log."
+- Real run: "**N jobs saved** to your tracking log."
 
 ---
 
