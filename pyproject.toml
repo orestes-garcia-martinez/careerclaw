@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "careerclaw"
-version = "0.4.3"
+version = "0.5.0"
 description = "CareerClaw: AI-powered job search assistant (ClawHub/OpenClaw skill)"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "pypdf>=5,<6",
 ]
