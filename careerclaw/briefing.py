@@ -42,6 +42,7 @@ class DailyBriefingResult:
     tracking_already_present: int
     duration_ms: int
     dry_run: bool
+    is_pro: bool = False
     resume_intelligence: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -65,6 +66,7 @@ class DailyBriefingResult:
             },
             "duration_ms": self.duration_ms,
             "dry_run": self.dry_run,
+            "tier": "pro" if self.is_pro else "free",
             "resume_intelligence": self.resume_intelligence,
         }
 
@@ -216,6 +218,7 @@ def run_daily_briefing(
         tracking_already_present=tracking_already,
         duration_ms=duration_ms,
         dry_run=dry_run,
+        is_pro=is_pro,
         resume_intelligence=resume_intel_dict,
     )
 
@@ -223,6 +226,10 @@ def run_daily_briefing(
 def print_human_summary(result: DailyBriefingResult, profile: UserProfile, *, analysis_mode: str = "summary") -> None:
     print("\n=== CareerClaw Daily Briefing ===")
     print(f"User: {result.user_id}")
+    if result.is_pro:
+        print("Tier: Pro ✓")
+    else:
+        print("Tier: Free  — unlock premium at https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro")
     print(f"Fetched jobs: {result.fetched_jobs} | After dedupe: {result.considered_jobs}")
     if result.dry_run:
         print("Mode: DRY RUN (no tracking written)")
