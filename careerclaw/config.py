@@ -19,11 +19,25 @@ HN_MAX_COMMENTS = 200
 
 HTTP_TIMEOUT_SECONDS = 20
 
-# --- User-Agent (update when repo is public) ---
+# --- User-Agent ---
 
-USER_AGENT = "CareerClaw/0.1 (+https://github.com/orestes-garcia-martinez/careerclaw)"
+USER_AGENT = "CareerClaw/0.5 (+https://github.com/orestes-garcia-martinez/careerclaw)"
 
-# --- LLM Draft Enhancement (Pro Tier) ---
+# --- CareerClaw Pro License ---
+
+# One-time license key purchased at https://orestes-garcia-martinez.lemonsqueezy.com
+# Gates: gap analysis, resume intelligence, LLM-enhanced drafts.
+# Never logged, never written to disk (only a hash is cached locally).
+CAREERCLAW_PRO_KEY: str | None = os.environ.get("CAREERCLAW_PRO_KEY") or None
+
+
+def pro_licensed() -> bool:
+    """Return True when a valid Pro license key is present and verified."""
+    from careerclaw.license import pro_licensed as _check
+    return _check(CAREERCLAW_PRO_KEY)
+
+
+# --- LLM Draft Enhancement (Pro Tier — also requires pro_licensed()) ---
 
 # User-provided API key for LLM draft enhancement.
 # Never logged, never written to disk, never included in structured output.

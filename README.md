@@ -142,20 +142,52 @@ role. I have 5 years of experience delivering production systems...
 | Additional job sources                        | ❌    | ✅ (roadmap) |
 | CSV / Sheets export                           | ❌    | ✅ (roadmap) |
 
-**Pro tier: $39–49 one-time.** Sold off-platform. Contact:
-orestes.garcia.martinez@gmail.com
+**Pro tier: $39 one-time (lifetime license).**
+Purchase at: https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro
+
+---
+
+## Pro: Upgrading
+
+Purchase a license key at the link above. LemonSqueezy delivers the key
+by email immediately after payment.
+
+### Activating — Docker / self-hosted users
+
+```bash
+docker compose run --rm openclaw-cli \
+  config set agents.defaults.sandbox.docker.env.CAREERCLAW_PRO_KEY "YOUR-KEY-HERE"
+```
+
+Or add it to your `.env` file:
+
+```
+CAREERCLAW_PRO_KEY=YOUR-KEY-HERE
+```
+
+The key is activated on first use and cached locally as a SHA-256 hash.
+Re-validation happens every 7 days (requires internet access).
+
+### Activating — MyClaw managed users
+
+Tell your OpenClaw agent:
+> "Set my CAREERCLAW_PRO_KEY to YOUR-KEY-HERE"
+
+The agent stores the key in your OpenClaw config and activates it on
+the next CareerClaw run.
 
 ---
 
 ## Pro: LLM-Enhanced Drafts
 
-When `CAREERCLAW_LLM_KEY` is set, each top match receives an
-LLM-enhanced outreach email that references your specific resume signals
-and the job's requirements. Falls back to the deterministic template
-silently if the call fails.
+With a valid Pro license, you can also supply your own LLM API key to
+receive personalized outreach emails referencing your specific resume
+signals and each job's requirements. Falls back to the deterministic
+template silently on any failure.
 
 ```bash
 # Anthropic (default — uses claude-sonnet-4-6)
+export CAREERCLAW_PRO_KEY=YOUR-KEY-HERE
 export CAREERCLAW_LLM_KEY=sk-ant-...
 python -m careerclaw.briefing --resume-pdf .careerclaw/resume.pdf
 
@@ -166,6 +198,11 @@ python -m careerclaw.briefing --resume-pdf .careerclaw/resume.pdf
 
 # Override the model
 export CAREERCLAW_LLM_MODEL=claude-haiku-4-5-20251001
+```
+
+```powershell
+$env:CAREERCLAW_PRO_KEY = "YOUR-KEY-HERE"
+$env:CAREERCLAW_LLM_KEY = "sk-ant-..."
 ```
 
 Estimated cost per run: ~$0.018 at claude-sonnet-4-6 pricing with your
@@ -200,13 +237,14 @@ Tracking is written automatically on each non-dry-run. Status options:
 
 Runtime files — all stored under `.careerclaw/` (gitignored by default):
 
-| File                        | Contents                               |
-|-----------------------------|----------------------------------------|
-| `profile.json`              | Your profile                           |
-| `resume.txt` / `resume.pdf` | Your resume                            |
-| `tracking.json`             | Saved jobs keyed by stable `job_id`    |
-| `runs.jsonl`                | Append-only run log (one line per run) |
-| `resume_intel.json`         | Cached resume intelligence             |
+| File                        | Contents                                         |
+|-----------------------------|--------------------------------------------------|
+| `profile.json`              | Your profile                                     |
+| `resume.txt` / `resume.pdf` | Your resume                                      |
+| `tracking.json`             | Saved jobs keyed by stable `job_id`              |
+| `runs.jsonl`                | Append-only run log (one line per run)           |
+| `resume_intel.json`         | Cached resume intelligence                       |
+| `.license_cache`            | Pro license validation cache (SHA-256 hash only) |
 
 ---
 
@@ -259,8 +297,8 @@ deduplicate()             ← stable job_id hash
 rank_jobs()               ← keyword + experience + salary + work-mode
         │
         ▼
-build_resume_intelligence()   ← section-aware keyword extraction
-gap_analysis()                ← matched vs missing signals
+build_resume_intelligence()   ← section-aware keyword extraction (Pro)
+gap_analysis()                ← matched vs missing signals (Pro)
         │
         ▼
 draft_outreach()          ← deterministic template (Free)
@@ -291,8 +329,11 @@ output bundle             ← console summary + JSON payload
 # All unit and integration tests (offline, no network)
 python -m pytest -q
 
-# Live smoke test (requires network — run before releases)
-python -m scripts.smoke_test_sources
+# Live source smoke test (requires network — run before releases)
+python scripts/smoke_test_sources.py
+
+# Pro license end-to-end smoke test (requires CAREERCLAW_PRO_KEY + network)
+CAREERCLAW_PRO_KEY=<your-key> python scripts/smoke_test_license.py
 ```
 
 ### Project structure
@@ -308,6 +349,7 @@ careerclaw/
 ├── config.py          # Environment and source configuration
 ├── drafting.py        # Deterministic draft templates
 ├── gap.py             # Gap analysis engine
+├── license.py         # Pro license activation and validation
 ├── models.py          # Canonical data schemas
 ├── requirements.py    # Job requirements extraction
 ├── resume_intel.py    # Resume intelligence
@@ -316,6 +358,9 @@ careerclaw/
 docs/
 ├── architecture.md
 └── data-schema.md
+scripts/
+├── smoke_test_sources.py   # Live source fetch test
+└── smoke_test_license.py   # Pro license end-to-end test
 tests/
 ├── contract/          # Adapter contract tests (offline fixtures)
 ├── fixtures/          # Test data
@@ -330,12 +375,16 @@ CareerClaw is built on a local-first architecture. Your data never
 leaves your machine unless you configure an LLM key.
 
 - **No backend.** No telemetry. No analytics endpoint.
-- **No credential storage.** API keys are read from environment
-  variables at runtime and never written to disk or logs.
+- **API keys never stored.** `CAREERCLAW_LLM_KEY` is read from the
+  environment at runtime and never written to disk or logs.
+- **License cache is hash-only.** `CAREERCLAW_PRO_KEY` is validated
+  against LemonSqueezy on first use. Only a SHA-256 hash of the key is
+  written to `.careerclaw/.license_cache` — the raw key is never stored.
 - **No PII transmission.** Your resume, profile, and application history
   are stored only in `.careerclaw/` on your local machine.
-- **External calls:** `remoteok.com` (RSS, no auth) and
-  `hacker-news.firebaseio.com` (public API, no auth) only.
+- **External calls:** `remoteok.com` (RSS, no auth),
+  `hacker-news.firebaseio.com` (public API, no auth), and
+  `api.lemonsqueezy.com` (license validation only) only.
 - **LLM calls** go directly to your configured provider (Anthropic or
   OpenAI) using your own key — no CareerClaw server in the middle.
 - **VirusTotal clean** on every release.
@@ -347,8 +396,6 @@ See [SECURITY.md](SECURITY.md) for the vulnerability disclosure policy.
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
-
-Current version: **v0.4.3**
 
 ---
 

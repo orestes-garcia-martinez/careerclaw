@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format follows Keep a Changelog and Semantic Versioning.
 
 ---
+
+## [0.6.0] - 2026-02-23
+
+### Added
+- careerclaw/license.py: activate/validate against LemonSqueezy API
+  with 7-day cache and 24h grace period on network failure
+- careerclaw/config.py: add CAREERCLAW_PRO_KEY env var and pro_licensed()
+- careerclaw/briefing.py: gate gap analysis, resume intel, and LLM
+  drafts behind pro_licensed()
+- .env.example + SKILL.md: document CAREERCLAW_PRO_KEY with purchase
+  URL and MyClaw activation instructions
+- tests/unit/test_license.py: 15 unit tests (no network)
+- scripts/smoke_test_license.py: end-to-end activation smoke test"
+  git push origin feat/pro-license-gate
+
+---
+
 ## [0.5.0] - 2026-02-22
 
 ### Added
