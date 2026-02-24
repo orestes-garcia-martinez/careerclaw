@@ -8,11 +8,14 @@ description: >
 metadata:
   openclaw:
     emoji: "🦞"
+    primaryEnv: CAREERCLAW_PRO_KEY
     requires:
       bins: ["python3"]
     optionalEnv:
+      - name: CAREERCLAW_PRO_KEY
+        description: "CareerClaw Pro license key. Purchase at https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro — unlocks gap analysis, resume intelligence, and LLM-enhanced drafts."
       - name: CAREERCLAW_LLM_KEY
-        description: "API key for LLM-enhanced outreach drafts (Pro). Anthropic or OpenAI."
+        description: "API key for LLM-enhanced outreach drafts (Pro only). Anthropic or OpenAI."
       - name: CAREERCLAW_LLM_PROVIDER
         description: "'anthropic' (default) or 'openai'"
       - name: CAREERCLAW_LLM_MODEL
@@ -202,12 +205,47 @@ Always tell the user which mode was used:
 
 ---
 
+## Upgrading to Pro
+
+CareerClaw Pro unlocks gap analysis, resume intelligence, and LLM-enhanced
+outreach drafts. It requires a one-time license key.
+
+**Purchase:** https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro
+**Price:** $39 (lifetime, one-time payment)
+
+After purchase, LemonSqueezy emails the license key immediately.
+
+### Activating Pro — Docker / self-hosted users
+
+```bash
+docker compose run --rm openclaw-cli \
+  config set agents.defaults.sandbox.docker.env.CAREERCLAW_PRO_KEY "YOUR-KEY-HERE"
+```
+
+Or add it to your `.env` file:
+```
+CAREERCLAW_PRO_KEY=YOUR-KEY-HERE
+```
+
+The key is activated automatically on first use and cached locally.
+Re-validation happens every 7 days (requires internet access).
+
+### Activating Pro — MyClaw managed users
+
+Tell your OpenClaw agent:
+> "Set my CAREERCLAW_PRO_KEY to YOUR-KEY-HERE"
+
+The agent will store the key in your OpenClaw config and activate it
+on the next CareerClaw run.
+
+---
+
 ## LLM-Enhanced Drafts (Pro — user's own API key)
 
-When `CAREERCLAW_LLM_KEY` is set in the environment, each top match
-receives an LLM-enhanced outreach email referencing the user's specific
-resume signals and the job's requirements. Falls back to the
-deterministic template silently on any failure.
+When `CAREERCLAW_PRO_KEY` is set and valid, and `CAREERCLAW_LLM_KEY`
+is also provided, each top match receives an LLM-enhanced outreach email
+referencing the user's specific resume signals and the job's requirements.
+Falls back to the deterministic template silently on any failure.
 
 ```bash
 # Anthropic (default provider, uses claude-sonnet-4-6)

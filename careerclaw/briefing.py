@@ -126,11 +126,15 @@ def run_daily_briefing(
 
     ranked = rank_jobs(profile=profile, jobs=jobs, top_n=top_k)
 
+    # --- Pro tier gate (evaluated once per run) ---
+    is_pro = config.pro_licensed()
+
     matches: List[RankedMatch] = []
     for item in ranked:
         gap_obj = None
         analysis = None
-        if resume_intel is not None:
+        # Gap analysis and resume intel are Pro-only features.
+        if is_pro and resume_intel is not None:
             req = extract_job_requirements(item.job)
             gap_obj = analyze_gap(resume=resume_intel, job=req)
             analysis = gap_obj.to_dict().get("analysis")
@@ -145,8 +149,10 @@ def run_daily_briefing(
         )
 
     # --- Draft generation (deterministic baseline + optional LLM enhancement) ---
+    # LLM enhancement requires both a valid Pro license AND an LLM API key.
     use_llm = (
             not no_enhance
+            and is_pro
             and config.llm_configured()
             and resume_intel is not None
     )
