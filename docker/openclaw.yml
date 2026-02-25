@@ -1,14 +1,18 @@
 # openclaw.yml
 #
 # OpenClaw agent configuration for local CareerClaw testing.
-# Place this file at the repo root. OpenClaw reads it automatically when
-# the gateway starts (mounted via the openclaw-config volume or passed via CLI).
+# This file is mounted read-only into the gateway container by docker-compose.yml
+# (target: /home/node/.openclaw/openclaw.yml). OpenClaw reads it on startup.
 #
 # Sandbox model:
-#   - Gateway runs on host (via Docker)
-#   - All agent tool execution happens inside the custom careerclaw-sandbox image
+#   - Gateway runs in Docker (openclaw:local)
+#   - All agent tool execution happens inside the custom CareerClaw sandbox image
+#     (openclaw-sandbox:careerclaw — built from docker/Dockerfile.sandbox)
 #   - Workspace access is rw so the skill can read profile.json and write tracking.json
 #   - Network is bridge — outbound internet allowed for job source fetching
+#
+# After any change to this file, restart the gateway:
+#   docker compose -f docker/docker-compose.yml --env-file .env restart openclaw-gateway
 
 agents:
   defaults:
@@ -22,8 +26,9 @@ agents:
       workspaceRoot: "/workspace"
 
       docker:
-        # Custom image built by Dockerfile.sandbox (Python 3.12 + CareerClaw)
-        image: "careerclaw-sandbox:local"
+        # Custom image built by docker/Dockerfile.sandbox (Python 3.11+ + CareerClaw)
+        # Build: docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
+        image: "openclaw-sandbox:careerclaw"
         workdir: "/workspace"
 
         # Security hardening — keep attack surface minimal
@@ -55,11 +60,26 @@ agents:
             soft: 1024
             hard: 2048
 
-        # Environment vars forwarded from the gateway into the sandbox
+        # Environment vars forwarded from the gateway into each sandbox container.
+        # Values are interpolated from the gateway's own environment, which is
+        # populated from .env via docker-compose.yml.
         env:
+          # Pro license key — required for gap analysis, resume intelligence, LLM drafts
+          CAREERCLAW_PRO_KEY: "${CAREERCLAW_PRO_KEY}"
+
+          # Provider-specific keys for Pro LLM draft enhancement (recommended)
+          CAREERCLAW_OPENAI_KEY: "${CAREERCLAW_OPENAI_KEY}"
+          CAREERCLAW_ANTHROPIC_KEY: "${CAREERCLAW_ANTHROPIC_KEY}"
+
+          # Legacy single-key override (kept for backwards compatibility)
           CAREERCLAW_LLM_KEY: "${CAREERCLAW_LLM_KEY}"
           CAREERCLAW_LLM_PROVIDER: "${CAREERCLAW_LLM_PROVIDER:-anthropic}"
           CAREERCLAW_LLM_MODEL: "${CAREERCLAW_LLM_MODEL:-}"
+
+          # Failover chain + retry policy
+          CAREERCLAW_LLM_CHAIN: "${CAREERCLAW_LLM_CHAIN:-openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6}"
+          CAREERCLAW_LLM_MAX_RETRIES: "${CAREERCLAW_LLM_MAX_RETRIES:-2}"
+          CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS: "${CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS:-2}"
 
       # Auto-prune idle containers after 1 hour to keep Docker clean
       prune:

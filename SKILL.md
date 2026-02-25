@@ -1,6 +1,6 @@
 ---
 name: careerclaw
-version: 0.5.0
+version: 0.7.0
 description: >
   Run a job search briefing, find job matches, draft outreach emails,
   or track job applications. Triggers on: daily briefing, job search,
@@ -13,13 +13,23 @@ metadata:
       bins: ["python3"]
     optionalEnv:
       - name: CAREERCLAW_PRO_KEY
-        description: "CareerClaw Pro license key. Purchase at https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro — unlocks gap analysis, resume intelligence, and LLM-enhanced drafts."
+        description: "CareerClaw Pro license key (Polar.sh). Unlocks gap analysis, resume intelligence, and LLM-enhanced drafts."
+      - name: CAREERCLAW_OPENAI_KEY
+        description: "OpenAI API key for Pro LLM draft enhancement. Takes precedence over CAREERCLAW_LLM_KEY for OpenAI providers."
+      - name: CAREERCLAW_ANTHROPIC_KEY
+        description: "Anthropic API key for Pro LLM draft enhancement. Takes precedence over CAREERCLAW_LLM_KEY for Anthropic providers."
       - name: CAREERCLAW_LLM_KEY
-        description: "API key for LLM-enhanced outreach drafts (Pro only). Anthropic or OpenAI."
+        description: "Legacy single-provider API key override. Prefer CAREERCLAW_OPENAI_KEY / CAREERCLAW_ANTHROPIC_KEY for mixed failover chains."
       - name: CAREERCLAW_LLM_PROVIDER
-        description: "'anthropic' (default) or 'openai'"
+        description: "'anthropic' (default) or 'openai'. Ignored when CAREERCLAW_LLM_CHAIN is set."
       - name: CAREERCLAW_LLM_MODEL
-        description: "Override the default model. Defaults: claude-sonnet-4-6 / gpt-4o-mini"
+        description: "Override the default model. Defaults: claude-sonnet-4-6 (Anthropic) / gpt-4o-mini (OpenAI)."
+      - name: CAREERCLAW_LLM_CHAIN
+        description: "Ordered failover chain, e.g. 'openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6'."
+      - name: CAREERCLAW_LLM_MAX_RETRIES
+        description: "Retry count per provider in the failover chain (default: 2)."
+      - name: CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS
+        description: "Consecutive failures before a provider is skipped for the run (default: 2)."
 ---
 
 # CareerClaw
@@ -113,8 +123,8 @@ python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --dry-run
 python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --json
 
 # Control analysis verbosity
-python -m careerclaw.briefing --analysis off      # minimal
-python -m careerclaw.briefing --analysis summary  # fit % and highlights (default)
+python -m careerclaw.briefing --analysis off      # no gap analysis (default)
+python -m careerclaw.briefing --analysis summary  # fit % and highlights
 python -m careerclaw.briefing --analysis full     # gap keywords and phrases
 
 # Return more than 3 results
@@ -192,7 +202,8 @@ complete email body ready to send.
 5. If `"enhanced": true` on a draft, tell the user it is
    **LLM-enhanced** and personalized from their resume signals.
    If `"enhanced": false`, tell the user it is a **template draft**
-   and offer to upgrade via `CAREERCLAW_LLM_KEY` if not already set.
+   and offer to upgrade via `CAREERCLAW_ANTHROPIC_KEY` or
+   `CAREERCLAW_OPENAI_KEY` if not already set.
 
 ### After the briefing
 
@@ -218,21 +229,34 @@ outreach drafts. It requires a one-time license key.
 **Purchase:** https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro
 **Price:** $39 (lifetime, one-time payment)
 
-After purchase, LemonSqueezy emails the license key immediately.
+After purchase, the license key is emailed immediately.
 
 ### Activating Pro — Docker / self-hosted users
 
-```bash
-docker compose run --rm openclaw-cli \
-  config set agents.defaults.sandbox.docker.env.CAREERCLAW_PRO_KEY "YOUR-KEY-HERE"
-```
+Add the following to your `.env` file (see `.env.example`):
 
-Or add it to your `.env` file:
-```
+```env
+# Required for Pro features
 CAREERCLAW_PRO_KEY=YOUR-KEY-HERE
+
+# Provider-specific keys for LLM-enhanced drafts (recommended)
+CAREERCLAW_OPENAI_KEY=sk-proj-...
+CAREERCLAW_ANTHROPIC_KEY=sk-ant-...
+
+# Optional: failover chain (defaults are set in docker-compose.yml)
+CAREERCLAW_LLM_CHAIN=openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6
 ```
 
-The key is activated automatically on first use and cached locally.
+Restart the gateway after updating `.env`:
+
+```bash
+docker compose -f docker/docker-compose.yml --env-file .env restart openclaw-gateway
+```
+
+These values are forwarded into the CareerClaw sandbox container via
+`docker/openclaw.yml`. No manual `config set` commands are needed.
+
+The key is validated automatically on first use and cached locally.
 Re-validation happens every 7 days (requires internet access).
 
 ### Activating Pro — MyClaw managed users
@@ -247,28 +271,47 @@ on the next CareerClaw run.
 
 ## LLM-Enhanced Drafts (Pro — user's own API key)
 
-When `CAREERCLAW_PRO_KEY` is set and valid, and `CAREERCLAW_LLM_KEY`
-is also provided, each top match receives an LLM-enhanced outreach email
+When `CAREERCLAW_PRO_KEY` is set and valid, and at least one provider
+key is available, each top match receives an LLM-enhanced outreach email
 referencing the user's specific resume signals and the job's requirements.
 Falls back to the deterministic template silently on any failure.
 
-```bash
-# Anthropic (default provider, uses claude-sonnet-4-6)
-export CAREERCLAW_LLM_KEY=sk-ant-...
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt
+**Provider-specific keys (recommended):**
 
-# OpenAI (uses gpt-4o-mini)
-export CAREERCLAW_LLM_KEY=sk-...
+```bash
+# Anthropic
+export CAREERCLAW_ANTHROPIC_KEY=sk-ant-...
+
+# OpenAI
+export CAREERCLAW_OPENAI_KEY=sk-proj-...
+
+python -m careerclaw.briefing --resume-text .careerclaw/resume.txt
+```
+
+**Legacy single-key override (not recommended for mixed chains):**
+
+```bash
+export CAREERCLAW_LLM_KEY=sk-ant-...          # Anthropic (default provider)
+export CAREERCLAW_LLM_KEY=sk-proj-...         # OpenAI
 export CAREERCLAW_LLM_PROVIDER=openai
 python -m careerclaw.briefing --resume-text .careerclaw/resume.txt
+```
 
-# Force deterministic draft even when key is set
+**Failover chain (for resilience across providers):**
+
+```bash
+export CAREERCLAW_LLM_CHAIN=openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6
+```
+
+**Force deterministic draft even when key is set:**
+
+```bash
 python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --no-enhance
 ```
 
 JSON draft output includes `"enhanced": true | false` per draft.
 
-**Security:** The API key is read from the environment only. It is never
+**Security:** API keys are read from the environment only. They are never
 logged, written to disk, or included in any structured output.
 
 ---
