@@ -34,6 +34,8 @@ persist an application tracking log — all locally, with no backend.
 
 ### Step 1 — Install
 
+> **Docker / sandbox users: skip this step.** CareerClaw is pre-installed
+> in the sandbox image. Jump straight to Step 2.
 ```bash
 pip install -e .
 mkdir -p .careerclaw
@@ -82,7 +84,7 @@ extracted values. Offer to correct any field they disagree with.
 
 ### Step 3 — Run the first briefing
 
-Once the profile is confirmed, immediately run:
+Once the profile is confirmed, use the **`bash` tool** to immediately run:
 
 ```bash
 python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --dry-run
@@ -96,6 +98,9 @@ confirms they are happy with the results.
 ---
 
 ## Running the Daily Briefing
+
+> **Always use the `bash` tool to execute these commands.** CareerClaw
+> runs inside a Python sandbox — never attempt to execute it inline.
 
 ```bash
 # Standard run (writes tracking.json and runs.jsonl)
