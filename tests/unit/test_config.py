@@ -14,10 +14,19 @@ import pytest
 
 def _reload_config(monkeypatch, key_value):
     """Helper: set env var and reload config so module-level vars pick it up."""
-    if key_value is None:
-        monkeypatch.delenv("CAREERCLAW_LLM_KEY", raising=False)
-    else:
+    # Clear every key that llm_configured() checks
+    for env_var in (
+            "CAREERCLAW_LLM_KEY",
+            "CAREERCLAW_OPENAI_KEY",
+            "CAREERCLAW_ANTHROPIC_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+    ):
+        monkeypatch.delenv(env_var, raising=False)
+
+    if key_value is not None:
         monkeypatch.setenv("CAREERCLAW_LLM_KEY", key_value)
+
     import careerclaw.config as cfg
     importlib.reload(cfg)
     return cfg

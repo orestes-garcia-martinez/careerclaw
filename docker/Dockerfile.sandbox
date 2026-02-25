@@ -30,5 +30,9 @@ RUN pip install --break-system-packages --no-cache-dir /tmp/careerclaw-src \
         openai && \
     rm -rf /tmp/careerclaw-src
 
-# Drop back to the non-root user the base image expects
-USER node
+# Ensure runtime user is non-root (OpenClaw expects UID/GID 1000)
+# Use numeric IDs to avoid /etc/passwd username requirement.
+RUN mkdir -p /workspace && chown -R 1000:1000 /workspace
+
+USER 1000:1000
+WORKDIR /workspace
