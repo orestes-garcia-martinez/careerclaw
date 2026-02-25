@@ -284,6 +284,23 @@ and copy the numeric ID from the URL.
 
 ## Architecture
 
+---
+
+## LLM Architecture
+
+CareerClaw uses **two separate LLM layers**:
+
+- **Agent layer (OpenClaw)**: the model that powers your OpenClaw agent (chat, tool use, routing). Configure it via OpenClaw config:
+  - `openclaw-cli config set agents.defaults.model.primary openai/gpt-5.2`
+  - Requires `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` in your environment.
+
+- **Draft layer (CareerClaw Pro enhancement)**: an optional Pro-only step that enhances deterministic outreach drafts using your own provider key(s). It is **independent** from the agent model.
+  - Recommended: provider-specific keys `CAREERCLAW_OPENAI_KEY` / `CAREERCLAW_ANTHROPIC_KEY` (supports mixed failover chains)
+  - Legacy: `CAREERCLAW_LLM_KEY` (single-key override)
+  - Failover chain: `CAREERCLAW_LLM_CHAIN=openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6`
+
+If enhancement fails (rate limits, auth issues, provider outage), CareerClaw **silently falls back** to deterministic drafts.
+
 ```
 profile.json + resume file
         │

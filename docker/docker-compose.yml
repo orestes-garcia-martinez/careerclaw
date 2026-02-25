@@ -1,22 +1,26 @@
 # docker-compose.yml
 #
-# Local test environment for CareerClaw + OpenClaw agent.
+# Local test environment for CareerClaw + OpenClaw gateway/agent.
 # For local development/testing only — not part of ClawHub publication.
 #
 # Usage:
 #   First run:  ./docker-setup.sh   (from the official openclaw repo)
-#   Then:       docker compose up -d openclaw-gateway
-#   CLI:        docker compose run --rm openclaw-cli <command>
+#   Start:      docker compose -f docker/docker-compose.yml --env-file .env up -d openclaw-gateway
+#   CLI:        docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli <command>
+#
+# Notes:
+#   - The agent model is NOT set via .env. It’s stored in /home/node/.openclaw (volume) and configured with:
+#       docker compose ... run --rm openclaw-cli config set agents.defaults.model.primary openai/gpt-5.2
 #
 # Requires:
 #   - Docker Desktop with WSL2 backend
 #   - .env file at repo root (copy from .env.example and fill in values)
-#   - Official OpenClaw repo cloned separately to build the base sandbox image
+#   - Official OpenClaw repo cloned separately to build the base image (openclaw:local)
 #
 # Isolation contract:
-#   - Gateway and agent sandbox run in Docker — zero access to Windows host
-#   - Only .careerclaw/ is mounted (rw) — your source code is baked into the image
-#   - Network: bridge — outbound internet allowed (RemoteOK + HN API), no host access
+#   - Gateway and agent sandbox run in Docker
+#   - No host filesystem access EXCEPT the explicit bind mount of ../.careerclaw (rw)
+#   - Network: bridge — outbound internet allowed (RemoteOK + HN API), no host network access
 
 services:
   openclaw-gateway:
@@ -24,9 +28,9 @@ services:
     container_name: openclaw-gateway
     restart: unless-stopped
     ports:
-      - "18789:18789"                  # Control UI — http://localhost:18789
+      - "18789:18789"                  # Gateway — ws://127.0.0.1:18789 (agent control plane)
     volumes:
-      # OpenClaw config (memory, channel tokens, agent settings)
+      # OpenClaw config + state (agent settings, channel tokens, etc.)
       - openclaw-config:/home/node/.openclaw
       # CareerClaw runtime data — the ONLY host path exposed to the agent.
       # Path is relative to this compose file (docker/), so ../ = repo root.
@@ -37,14 +41,31 @@ services:
     environment:
       # OpenClaw gateway token — set in .env (never commit)
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+
       # Telegram bot token — set in .env after creating bot via @BotFather
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      # Anthropic API key — powers the OpenClaw agent itself
+
+      # Agent provider keys (OpenClaw agent model is set via openclaw-cli config)
+      # Recommended default model: openai/gpt-5.2
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # Optional fallback provider key (only needed if you configure an Anthropic model)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      # CareerClaw env vars — forwarded into the agent sandbox
+
+      # GitHub token — increases GitHub API rate limits (e.g., skill installs / repo fetches)
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+
+      # CareerClaw Pro draft enhancement (separate from agent model above)
       CAREERCLAW_LLM_KEY: ${CAREERCLAW_LLM_KEY:-}
-      CAREERCLAW_LLM_PROVIDER: ${CAREERCLAW_LLM_PROVIDER:-anthropic}
+
+      # Legacy single-provider config (kept for backwards compatibility)
+      CAREERCLAW_LLM_PROVIDER: ${CAREERCLAW_LLM_PROVIDER:-openai}
       CAREERCLAW_LLM_MODEL: ${CAREERCLAW_LLM_MODEL:-}
+
+      # Recommended: failover chain + retry policy
+      CAREERCLAW_LLM_CHAIN: ${CAREERCLAW_LLM_CHAIN:-openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6}
+      CAREERCLAW_LLM_MAX_RETRIES: ${CAREERCLAW_LLM_MAX_RETRIES:-2}
+      CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS: ${CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS:-2}
     networks:
       - openclaw-net
 

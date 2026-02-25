@@ -152,63 +152,77 @@ def test_briefing_json_output_has_enhanced_false_when_no_llm_key(tmp_path, monke
         assert draft["enhanced"] is False, f"Expected enhanced=False but got: {draft}"
 
 
+class BoomFailoverEnhancer:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def enhance(self, *args, **kwargs):
+        raise Exception("boom")  # could also raise DraftEnhancerError
+
+
 def test_briefing_falls_back_to_deterministic_when_enhancer_raises(tmp_path, monkeypatch):
-    """If LLMDraftEnhancer.enhance() raises, briefing must fall back silently."""
-    monkeypatch.setenv("CAREERCLAW_LLM_KEY", "sk-fake-key")
     monkeypatch.setattr(briefing, "fetch_all_jobs", lambda: _fake_jobs())
 
+    # Open LLM gate: must be Pro + llm_configured + resume_intel present
+    monkeypatch.setattr(briefing.config, "pro_licensed", lambda: True)
+
+    # Ensure CAREERCLAW_LLM_KEY is visible to careerclaw.config (import-time constant)
+    monkeypatch.setenv("CAREERCLAW_LLM_KEY", "dummy-key")
     import careerclaw.config as cfg
     import importlib
     importlib.reload(cfg)
     monkeypatch.setattr(briefing, "config", cfg)
 
-    # Patch LLMDraftEnhancer so enhance() always raises
-    mock_enhancer_instance = MagicMock()
-    mock_enhancer_instance.enhance.side_effect = DraftEnhancerError("Simulated failure")
+    # Make enhancer creation succeed but enhance() fail
+    monkeypatch.setattr(briefing, "FailoverDraftEnhancer", BoomFailoverEnhancer)
 
-    with patch("careerclaw.briefing.LLMDraftEnhancer", return_value=mock_enhancer_instance):
-        result = briefing.run_daily_briefing(
-            user_id="test-user",
-            profile=_profile(),
-            top_k=3,
-            dry_run=True,
-            resume_intel=_resume_intel(),
-        )
+    repo = JsonTrackingRepository(tmp_path)
 
-    # All drafts should be deterministic (enhanced=False)
-    d = result.to_dict()
-    for draft in d["drafts"]:
-        assert draft["enhanced"] is False
+    result = briefing.run_daily_briefing(
+        user_id="test-user",
+        profile=_profile(),
+        top_k=3,
+        repo=repo,
+        dry_run=True,
+        resume_intel=_resume_intel(),
+        no_enhance=False,
+    )
 
-    # And briefing must have produced results despite the failure
-    assert len(d["drafts"]) == 3
+    assert len(result.drafts) == 3
+    assert all(d.enhanced is False for d in result.drafts)
+
+
+class ShouldNotBeCreated:
+    def __init__(self, *args, **kwargs):
+        raise AssertionError("FailoverDraftEnhancer should not be created when no_enhance=True")
 
 
 def test_no_enhance_flag_forces_deterministic_even_with_key(tmp_path, monkeypatch):
-    """--no-enhance must prevent LLM calls even when CAREERCLAW_LLM_KEY is set."""
-    monkeypatch.setenv("CAREERCLAW_LLM_KEY", "sk-fake-key")
     monkeypatch.setattr(briefing, "fetch_all_jobs", lambda: _fake_jobs())
 
+    # Open LLM gate but force deterministic via flag
+    monkeypatch.setattr(briefing.config, "pro_licensed", lambda: True)
+
+    monkeypatch.setenv("CAREERCLAW_LLM_KEY", "dummy-key")
     import careerclaw.config as cfg
     import importlib
     importlib.reload(cfg)
     monkeypatch.setattr(briefing, "config", cfg)
 
-    mock_enhancer_instance = MagicMock()
+    # Ensure enhancer is not constructed at all
+    monkeypatch.setattr(briefing, "FailoverDraftEnhancer", ShouldNotBeCreated)
 
-    with patch("careerclaw.briefing.LLMDraftEnhancer", return_value=mock_enhancer_instance) as mock_cls:
-        result = briefing.run_daily_briefing(
-            user_id="test-user",
-            profile=_profile(),
-            top_k=3,
-            dry_run=True,
-            resume_intel=_resume_intel(),
-            no_enhance=True,
-        )
+    repo = JsonTrackingRepository(tmp_path)
 
-    # Enhancer should never have been instantiated
-    mock_cls.assert_not_called()
+    result = briefing.run_daily_briefing(
+        user_id="test-user",
+        profile=_profile(),
+        top_k=3,
+        repo=repo,
+        dry_run=True,
+        resume_intel=_resume_intel(),
+        no_enhance=True,
+    )
 
-    d = result.to_dict()
-    for draft in d["drafts"]:
-        assert draft["enhanced"] is False
+    assert len(result.drafts) == 3
+    assert all(d.enhanced is False for d in result.drafts)
