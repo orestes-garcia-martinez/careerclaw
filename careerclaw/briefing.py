@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import os
 import argparse
 import json
 import time
-import sys
-from pathlib import Path
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from careerclaw.config import load_llm_failover_config
 from careerclaw.models import BriefingRun, NormalizedJob, UserProfile
 from careerclaw.sources import fetch_all_jobs
 from careerclaw.matching.engine import rank_jobs
@@ -19,7 +19,7 @@ from careerclaw.resume_intel import build_resume_intelligence, cache_resume_inte
 from careerclaw.requirements import extract_job_requirements
 from careerclaw.gap import GapAnalysis, analyze_gap
 from careerclaw import config
-from careerclaw.llm.enhancer import LLMDraftEnhancer, DraftEnhancerError
+from careerclaw.llm.enhancer import DraftEnhancerError, FailoverDraftEnhancer
 
 
 @dataclass(frozen=True)
@@ -100,6 +100,46 @@ def _extract_top_skill_signals(explanation: Dict[str, Any], max_items: int = 2) 
                 return [str(x) for x in v[:max_items]]
     return []
 
+fail_cfg = load_llm_failover_config()
+
+def _api_key_for_provider(provider: str) -> str | None:
+    """
+    Provider-specific resolution to avoid mixed-chain auth bugs.
+
+    Priority (per provider):
+      1) CAREERCLAW_<PROVIDER>_KEY (explicit override)
+      2) Legacy CAREERCLAW_LLM_KEY (only if it matches provider key format)
+      3) Standard provider env (OPENAI_API_KEY / ANTHROPIC_API_KEY)
+    """
+    p = (provider or "").strip().lower()
+
+    if p == "openai":
+        explicit = os.getenv("CAREERCLAW_OPENAI_KEY")
+        if explicit and explicit.strip():
+            return explicit.strip()
+
+        legacy = config.CAREERCLAW_LLM_KEY
+        # Accept OpenAI-style keys (commonly sk-... / sk-proj-...)
+        if legacy and legacy.strip() and legacy.strip().startswith("sk-") and not legacy.strip().startswith("sk-ant-"):
+            return legacy.strip()
+
+        v = os.getenv("OPENAI_API_KEY")
+        return v.strip() if v and v.strip() else None
+
+    if p == "anthropic":
+        explicit = os.getenv("CAREERCLAW_ANTHROPIC_KEY")
+        if explicit and explicit.strip():
+            return explicit.strip()
+
+        legacy = config.CAREERCLAW_LLM_KEY
+        # Accept Anthropic-style keys (sk-ant-...)
+        if legacy and legacy.strip() and legacy.strip().startswith("sk-ant-"):
+            return legacy.strip()
+
+        v = os.getenv("ANTHROPIC_API_KEY")
+        return v.strip() if v and v.strip() else None
+
+    return None
 
 def run_daily_briefing(
         *,
@@ -162,15 +202,19 @@ def run_daily_briefing(
     enhancer = None
     if use_llm:
         try:
-            enhancer = LLMDraftEnhancer(
-                api_key=config.CAREERCLAW_LLM_KEY,
-                provider=config.CAREERCLAW_LLM_PROVIDER,
+            enhancer = FailoverDraftEnhancer(
+                api_key_resolver=_api_key_for_provider,
+                candidates=fail_cfg.chain,
                 resume=resume_intel,
+                max_retries=fail_cfg.max_retries,
+                breaker_consecutive_fails=fail_cfg.breaker_consecutive_fails,
             )
         except Exception:
             enhancer = None  # fall back silently
 
     drafts: List[DraftResult] = []
+    warned_llm_degraded = False
+
     for m in matches:
         base = draft_outreach(profile=profile, job=m.job)
         if enhancer is not None and m.gap is not None:
@@ -179,12 +223,19 @@ def run_daily_briefing(
                 # Prepend subject line from deterministic draft (first line)
                 subject_line = base.draft.split("\n")[0]
                 full_draft = subject_line + "\n\n" + enhanced_text
-                from careerclaw.drafting import DraftResult as DR
-                drafts.append(DR(job_id=m.job.job_id, draft=full_draft, enhanced=True))
-            except Exception:
-                # Any failure: fall back to deterministic, log warning
-                import sys
-                print("[CareerClaw] LLM enhancement failed for one draft, using deterministic fallback.", file=sys.stderr)
+                drafts.append(DraftResult(job_id=m.job.job_id, draft=full_draft, enhanced=True))
+            except DraftEnhancerError as e:
+                if not warned_llm_degraded:
+                    import sys
+                    print(f"[CareerClaw] LLM enhancement degraded; using deterministic fallback. reason={e}", file=sys.stderr)
+                    warned_llm_degraded = True
+                drafts.append(base)
+            except Exception as e:
+                # truly unexpected; still don’t spam
+                if not warned_llm_degraded:
+                    import sys
+                    print(f"[CareerClaw] LLM enhancement unexpected failure; using deterministic fallback. reason={type(e).__name__}", file=sys.stderr)
+                    warned_llm_degraded = True
                 drafts.append(base)
         else:
             drafts.append(base)

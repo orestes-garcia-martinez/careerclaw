@@ -6,6 +6,29 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ---
 
+## [unreleased]
+
+---
+
+## [0.7.0] - 2026-02-24
+
+### Added
+- Production-grade LLM draft enhancement failover chain via `CAREERCLAW_LLM_CHAIN` (provider/model candidates).
+- Retry + circuit breaker controls for the draft enhancer (`CAREERCLAW_LLM_MAX_RETRIES`, `CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS`).
+- README “LLM Architecture” section explaining Agent Layer (OpenClaw) vs Draft Layer (CareerClaw Pro).
+
+### Changed
+- Clean separation of provider keys:
+  - OpenClaw agent layer uses `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`.
+  - CareerClaw draft layer optionally uses `CAREERCLAW_LLM_KEY` and otherwise reuses provider keys.
+- Updated `.env.example` and `docker-compose.yml` comments to reflect the provider-specific key architecture and failover config.
+- Draft enhancement now degrades safely to deterministic drafts when LLM enhancement fails (auth/provider/transient errors).
+
+### Docs
+- Updated local Docker/OpenClaw testing guidance (Telegram workflow + sandbox configuration) for reproducible end-to-end runs.
+
+---
+
 ## [0.6.0] - 2026-02-23
 
 ### Added
