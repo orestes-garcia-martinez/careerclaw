@@ -5,17 +5,23 @@
 #
 # Usage:
 #   First run:  ./docker-setup.sh   (from the official openclaw repo)
+#   Build sandbox: docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
 #   Start:      docker compose -f docker/docker-compose.yml --env-file .env up -d openclaw-gateway
 #   CLI:        docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli <command>
 #
 # Notes:
-#   - The agent model is NOT set via .env. It’s stored in /home/node/.openclaw (volume) and configured with:
+#   - The agent model is NOT set via .env. It's stored in /home/node/.openclaw (volume) and configured with:
 #       docker compose ... run --rm openclaw-cli config set agents.defaults.model.primary openai/gpt-5.2
+#   - docker/openclaw.yml is mounted read-only into the gateway. It configures the sandbox image,
+#     mode, resource limits, and the env vars forwarded into CareerClaw's sandbox container.
+#     Edit openclaw.yml to change sandbox behaviour — no restart needed for image changes (rebuild
+#     required), but a gateway restart is needed for config changes.
 #
 # Requires:
 #   - Docker Desktop with WSL2 backend
 #   - .env file at repo root (copy from .env.example and fill in values)
-#   - Official OpenClaw repo cloned separately to build the base image (openclaw:local)
+#   - openclaw:local image (built by openclaw's own docker-setup.sh)
+#   - openclaw-sandbox:careerclaw image (built from docker/Dockerfile.sandbox)
 #
 # Isolation contract:
 #   - Gateway and agent sandbox run in Docker
@@ -32,12 +38,21 @@ services:
     volumes:
       # OpenClaw config + state (agent settings, channel tokens, etc.)
       - openclaw-config:/home/node/.openclaw
+      # Agent + sandbox config — mounts openclaw.yml so OpenClaw reads it on startup.
+      # Changes here take effect after a gateway restart.
+      - type: bind
+        source: ./openclaw.yml
+        target: /home/node/.openclaw/openclaw.yml
+        read_only: true
       # CareerClaw runtime data — the ONLY host path exposed to the agent.
       # Path is relative to this compose file (docker/), so ../ = repo root.
+      # create_host_path ensures Docker creates .careerclaw/ on first run.
       - type: bind
         source: ../.careerclaw
         target: /workspace/.careerclaw
         read_only: false
+        bind:
+          create_host_path: true
     environment:
       # OpenClaw gateway token — set in .env (never commit)
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
@@ -55,14 +70,23 @@ services:
       # GitHub token — increases GitHub API rate limits (e.g., skill installs / repo fetches)
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
 
-      # CareerClaw Pro draft enhancement (separate from agent model above)
-      CAREERCLAW_LLM_KEY: ${CAREERCLAW_LLM_KEY:-}
+      # ── CareerClaw sandbox env vars ─────────────────────────────────────────
+      # These are read by the gateway and forwarded into sandbox containers via
+      # the env: block in docker/openclaw.yml. Do not remove them from here.
 
-      # Legacy single-provider config (kept for backwards compatibility)
-      CAREERCLAW_LLM_PROVIDER: ${CAREERCLAW_LLM_PROVIDER:-openai}
+      # Pro license key (Polar.sh) — leave blank for free-tier mode
+      CAREERCLAW_PRO_KEY: ${CAREERCLAW_PRO_KEY:-}
+
+      # Provider-specific keys for Pro LLM draft enhancement
+      CAREERCLAW_OPENAI_KEY: ${CAREERCLAW_OPENAI_KEY:-}
+      CAREERCLAW_ANTHROPIC_KEY: ${CAREERCLAW_ANTHROPIC_KEY:-}
+
+      # Legacy single-provider key (kept for backwards compatibility)
+      CAREERCLAW_LLM_KEY: ${CAREERCLAW_LLM_KEY:-}
+      CAREERCLAW_LLM_PROVIDER: ${CAREERCLAW_LLM_PROVIDER:-anthropic}
       CAREERCLAW_LLM_MODEL: ${CAREERCLAW_LLM_MODEL:-}
 
-      # Recommended: failover chain + retry policy
+      # Failover chain + retry policy
       CAREERCLAW_LLM_CHAIN: ${CAREERCLAW_LLM_CHAIN:-openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6}
       CAREERCLAW_LLM_MAX_RETRIES: ${CAREERCLAW_LLM_MAX_RETRIES:-2}
       CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS: ${CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS:-2}
