@@ -1,6 +1,6 @@
 # Local Docker Testing — CareerClaw + OpenClaw Agent
 
-This guide documents exactly how to run **CareerClaw inside a local OpenClaw agent** using Docker, connect it to Telegram, and test the full skill end-to-end.
+This guide documents exactly how to run **CareerClaw inside a local OpenClaw agent** using Docker, connect it to Telegram, and test the full skill end to end.
 
 The setup is fully isolated:
 
@@ -16,58 +16,51 @@ The setup is fully isolated:
 
 ## Architecture Overview
 
-You are running **two layers**:
-
 ### Layer 1 — OpenClaw Gateway + Agent
 - Handles Telegram messaging
-- Runs the agent model (recommended: `openai/gpt-5.2`)
-- Stores agent configuration/state in a named Docker volume mounted at `/home/node/.openclaw`
-- Reads `docker/openclaw.yml` on startup (mounted read-only) for sandbox image, mode, resource limits, and CareerClaw env var forwarding
+- Runs the agent model (set via `openclaw-cli config set` — not via `.env`)
+- Stores agent config + state in the named Docker volume `careerclaw-openclaw-config` at `/home/node/.openclaw`
+- Reads `docker/openclaw.yml` on startup (mounted read-only) for sandbox image, resource limits, and CareerClaw env var forwarding
 
 ### Layer 2 — CareerClaw Sandbox
 - Runs `python -m careerclaw.briefing`
-- Isolated Python 3.11+ environment (custom image: `openclaw-sandbox:careerclaw`)
-- Writes runtime data only to `.careerclaw/` (profile, tracking, run logs, cached resume intel)
-- Receives CareerClaw env vars (including `CAREERCLAW_PRO_KEY`) forwarded from the gateway via `docker/openclaw.yml`
+- Custom image: `openclaw-sandbox:careerclaw` (built from `docker/Dockerfile.sandbox`)
+- Writes runtime data only to `.careerclaw/`
+- Receives CareerClaw env vars forwarded from the gateway via `docker/openclaw.yml`
 
-**Important:** The agent model selection is **not** controlled by `.env`.
-It is stored in `/home/node/.openclaw` and configured via `openclaw-cli config set`.
+> ⚠️ **Important:** Two config values — `agents.defaults.sandbox.mode` and `agents.defaults.model.primary` — are stored in the named volume, NOT read from `openclaw.yml`. They must be set via `openclaw-cli config set` after every volume reset.
 
 ---
 
 ## Prerequisites
 
 - Docker Desktop for Windows with WSL2 backend enabled
-- WSL2 terminal (Ubuntu) — all commands in this guide run from WSL2
+- WSL2 terminal (Ubuntu) — all commands run from WSL2
 - A Telegram account
-- An **OpenAI API key** (recommended; used by default agent model)
-- Optional: Anthropic API key (fallback provider)
+- An OpenAI API key **or** Anthropic API key for the OpenClaw agent
 - CareerClaw repository cloned locally
 
 ---
 
 ## File Structure
 
-These files are part of the Docker setup:
-
 ```text
 careerclaw/
 ├── docker/
-│   ├── Dockerfile.sandbox      ← Python 3.11+ + CareerClaw sandbox image
-│   ├── docker-compose.yml      ← OpenClaw gateway + wiring + env forwarding
-│   └── openclaw.yml            ← Sandbox config (image, mode, resource limits, env vars)
-├── .env.example                ← Template for secrets (committed)
-├── .env                        ← Your actual secrets (gitignored)
-└── DOCKER.md                   ← This file
+│   ├── Dockerfile.sandbox      ← extends openclaw:local with Python + CareerClaw
+│   ├── docker-compose.yml      ← gateway wiring + env forwarding
+│   └── openclaw.yml            ← sandbox image, resource limits, env vars
+├── .env.example                ← secrets template (committed)
+├── .env                        ← your actual secrets (gitignored)
+├── update.sh                   ← update SKILL.md + rebuild sandbox after code changes
+└── DOCKER.md                   ← this file
 ```
-
-`.env` is gitignored and must never be committed.
 
 ---
 
 ## Step 1 — Fix Docker Credential Helper (WSL2)
 
-Docker Desktop on Windows can set a credential helper that breaks inside WSL2, causing image pulls to fail with `error getting credentials`.
+Docker Desktop on Windows sets a credential helper that breaks inside WSL2.
 
 Check:
 
@@ -78,20 +71,14 @@ cat ~/.docker/config.json
 If you see `desktop.exe` as a credential store, fix it:
 
 ```bash
-# Replace the file with an empty JSON object
 echo '{}' > ~/.docker/config.json
 ```
 
-> This affects only WSL2. Docker Desktop on Windows is unaffected.
+> This must be done before any `docker run` or image pull. It only affects WSL2.
 
 ---
 
-## Step 2 — Build the OpenClaw Base Images
-
-The official OpenClaw repo provides a setup script that builds:
-
-- `openclaw:local` (gateway image)
-- `openclaw-sandbox:bookworm-slim` (base sandbox image)
+## Step 2 — Build the OpenClaw Base Image
 
 Clone OpenClaw **outside** the CareerClaw repo:
 
@@ -101,37 +88,38 @@ cd ~/openclaw
 ./docker-setup.sh
 ```
 
-Recommended wizard answers:
+Wizard answers:
 
 | Prompt | Answer |
 |--------|--------|
-| Model provider | **OpenAI (recommended)** |
-| API key | Your OpenAI key (`sk-...`) |
+| Model provider | OpenAI or Anthropic |
+| API key | Your key |
 | Messaging channel | Skip — Telegram is configured later |
 | Tailscale / mesh networking | No |
-| Optional features | Skip |
+| Configure skills now? | **No** |
+| Any other optional features | Skip |
 
-Verify images exist:
+Verify:
 
 ```bash
 docker images | grep openclaw
-# Expected:
-# openclaw              local
-# openclaw-sandbox      bookworm-slim
+# Expected: openclaw   local   ...
 ```
 
-> Re-run `./docker-setup.sh` if either image is missing.
+> ⚠️ `openclaw-sandbox:bookworm-slim` is **no longer produced** as a separate tagged image in recent OpenClaw versions. Only `openclaw:local` is needed — do not look for the bookworm-slim image.
 
 ---
 
 ## Step 3 — Build the CareerClaw Sandbox Image
 
-This builds a custom sandbox image extending `openclaw-sandbox:bookworm-slim` with Python 3.11+, CareerClaw, and required packages.
+This extends `openclaw:local` with Python 3.12, CareerClaw, `anthropic`, and `openai` pre-installed.
 
-Run from the **CareerClaw repo root**:
+> ⚠️ Verify `docker/Dockerfile.sandbox` starts with `FROM openclaw:local` — **not** `FROM openclaw-sandbox:bookworm-slim`. Update it if your repo still has the old value.
+
+Run from the **CareerClaw repo root** (the build context must be `.`):
 
 ```bash
-cd /path/to/careerclaw
+cd /mnt/d/02_clawhub-monetization/careerclaw
 
 docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
 ```
@@ -139,36 +127,35 @@ docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
 Verify:
 
 ```bash
-docker images | grep "openclaw-sandbox"
-# Expected: openclaw-sandbox   careerclaw
+docker images | grep careerclaw
+# Expected: openclaw-sandbox   careerclaw   ...
 ```
 
-> Rebuild this image any time you update CareerClaw source code.
+> Rebuild any time you update Python source code in `careerclaw/`.
 
 ---
 
 ## Step 4 — Configure Environment Variables
-
-From the CareerClaw repo root:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Fill in the required values:
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `OPENCLAW_GATEWAY_TOKEN` | Yes | From `~/.openclaw/openclaw.json` after first gateway start |
+| `TELEGRAM_BOT_TOKEN` | Yes | From @BotFather |
+| `OPENAI_API_KEY` | Recommended | Powers the OpenClaw agent |
+| `ANTHROPIC_API_KEY` | Optional | Fallback agent provider |
+| `GITHUB_TOKEN` | Recommended | Prevents GitHub API rate limits on skill installs |
+| `CAREERCLAW_PRO_KEY` | Optional | Pro license key |
+| `CAREERCLAW_OPENAI_KEY` | Optional | **Must be explicitly set** for Pro LLM drafts via OpenAI |
+| `CAREERCLAW_ANTHROPIC_KEY` | Optional | **Must be explicitly set** for Pro LLM drafts via Anthropic |
 
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `OPENCLAW_GATEWAY_TOKEN` | Yes | Gateway auth token (retrieved in Step 7b) |
-| `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token |
-| `OPENAI_API_KEY` | Recommended | Agent provider key (default model) |
-| `ANTHROPIC_API_KEY` | Optional | Fallback provider key |
-| `CAREERCLAW_PRO_KEY` | Optional | Pro license key (Polar.sh) |
-| `CAREERCLAW_OPENAI_KEY` | Optional | OpenAI key for Pro LLM draft enhancement |
-| `CAREERCLAW_ANTHROPIC_KEY` | Optional | Anthropic key for Pro LLM draft enhancement |
+> ⚠️ **`CAREERCLAW_OPENAI_KEY` and `CAREERCLAW_ANTHROPIC_KEY` must have actual values if you want LLM-enhanced drafts.** If left empty, CareerClaw falls back to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — your agent keys — which may cause billing confusion or rate limit collisions.
 
-Failover + retry defaults (recommended for Pro users):
+LLM failover chain:
 
 ```env
 CAREERCLAW_LLM_CHAIN=openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6
@@ -176,45 +163,41 @@ CAREERCLAW_LLM_MAX_RETRIES=2
 CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS=2
 ```
 
-> `OPENCLAW_GATEWAY_TOKEN` is generated by `./docker-setup.sh`. You will retrieve it in Step 7b after the gateway starts for the first time.
+> If your Anthropic account has a negative credit balance, remove `anthropic/claude-sonnet-4-6` from the chain to avoid billing errors.
 
 ---
 
 ## Step 5 — Create a Telegram Bot
 
-1. Open Telegram and search **@BotFather** (blue checkmark)
-2. Click **START**, then send `/newbot`
-3. Enter a display name (e.g., `CareerClaw Test`)
-4. Enter a username ending in `bot` (e.g., `careerclaw_orestes_bot`)
-5. BotFather replies with a token — copy it into `.env` as `TELEGRAM_BOT_TOKEN`
+1. Open Telegram, search **@BotFather** (blue checkmark)
+2. Send `/newbot`
+3. Enter a display name, e.g. `CareerClaw Test`
+4. Enter a username ending in `bot`, e.g. `careerclaw_yourname_bot`
+5. Copy the token into `.env` as `TELEGRAM_BOT_TOKEN`
 
-> Keep the token secret. If it's exposed, regenerate it via `/revoke` in @BotFather.
+> If the token is exposed, regenerate via `/revoke` in @BotFather. Select your bot from the list — do not type the name manually.
 
 ---
 
-## Step 6 — Fix Volume Permissions (First Run Only)
+## Step 6 — Fix Volume Permissions
 
-The OpenClaw named volume must be owned by the non-root `node` user (UID 1000) that the gateway runs as.
-
-Run once after the volume is created:
+The named volume must be owned by UID 1000 (the non-root `node` user the gateway runs as):
 
 ```bash
 docker run --rm -v careerclaw-openclaw-config:/data alpine chown -R 1000:1000 /data
 ```
 
-> Repeat this if you see `EACCES: permission denied` errors in gateway logs.
+> ⚠️ Run this every time the volume is deleted and recreated. Without it you will see `EACCES: permission denied` errors and the gateway will fail.
 
 ---
 
 ## Step 7 — Start the Gateway
 
-All `docker compose` commands require `--env-file .env` because the compose file lives in `docker/` but `.env` is in the repo root.
-
 ```bash
 docker compose -f docker/docker-compose.yml --env-file .env up -d openclaw-gateway
 ```
 
-Watch logs:
+Watch logs to confirm a clean start:
 
 ```bash
 docker compose -f docker/docker-compose.yml --env-file .env logs openclaw-gateway -f
@@ -223,143 +206,190 @@ docker compose -f docker/docker-compose.yml --env-file .env logs openclaw-gatewa
 Look for:
 
 ```text
-[telegram] starting provider
+[telegram] starting provider (@your_bot_name)
 [gateway] listening on ws://127.0.0.1:18789
-[gateway] agent model: openai/gpt-5.2
 ```
 
-Press `Ctrl+C` to stop tailing logs (the gateway keeps running).
-
-### Step 7b — Retrieve `OPENCLAW_GATEWAY_TOKEN`
-
-If `OPENCLAW_GATEWAY_TOKEN` was not written to `.env` by `./docker-setup.sh`, retrieve it from the running gateway:
-
-```bash
-docker compose -f docker/docker-compose.yml --env-file .env exec -T openclaw-gateway \
-  sh -lc 'cat /home/node/.openclaw/openclaw.json | grep -i token'
-```
-
-Copy the token into `.env`, then restart the gateway:
-
-```bash
-docker compose -f docker/docker-compose.yml --env-file .env restart openclaw-gateway
-```
+Press `Ctrl+C` to stop following logs (gateway keeps running).
 
 ---
 
 ## Step 8 — Pair Your Telegram Account
 
-Pairing links your Telegram account to the bot so only you can send commands.
-
 ### 8a — Initiate from Telegram
-Open your bot in Telegram and send any message (e.g., `hi`). The bot should reply with a pairing code.
+Open your bot and send any message (e.g. `hi`). The bot replies with a pairing code.
 
 ### 8b — Approve via CLI
-List pending requests:
-
-```bash
-docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli pairing list
-```
-
-Approve (replace `CODE`):
 
 ```bash
 docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli pairing approve CODE
 ```
 
-Expected output: `Approved telegram sender <your-id>.`
+Expected: `Approved telegram sender <your-id>.`
 
-Send `hi` again — it should now respond as the OpenClaw agent.
-
----
-
-## Step 9 — Verify Sandbox Configuration
-
-The sandbox image, mode, resource limits, and CareerClaw env var forwarding are all configured in `docker/openclaw.yml`, which is mounted read-only into the gateway by `docker-compose.yml`. No manual `config set` commands are needed for standard setup.
-
-Confirm OpenClaw has loaded the config:
-
-```bash
-docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
-  config get agents.defaults.sandbox
-```
-
-Expected output should show:
-- `docker.image`: `openclaw-sandbox:careerclaw`
-- `mode`: `non-main`
-- `workspaceAccess`: `rw`
-
-If the sandbox image or mode are wrong, check that `docker/openclaw.yml` is mounted correctly and restart the gateway.
+> ⚠️ Pairing is stored in the named volume. If the volume is reset, you must pair again.
 
 ---
 
-## Step 10 — Set Agent Model (Recommended)
+## Step 9 — Apply Post-Volume Config (Always Required)
 
-Set the agent model:
+> ⚠️ This step is **always required** after any volume reset. `openclaw.yml` sets `docker.image` from file but does NOT persist `mode`. The agent model is also wiped on every reset.
 
 ```bash
+# 1. Set sandbox mode
 docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
-  config set agents.defaults.model.primary openai/gpt-5.2
+  config set agents.defaults.sandbox.mode "non-main"
+
+# 2. Set agent model
+docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
+  config set agents.defaults.model.primary "openai/gpt-5.2"
+
+# 3. Restart to apply
+docker compose -f docker/docker-compose.yml --env-file .env restart openclaw-gateway
 ```
 
 Verify:
 
 ```bash
 docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
-  config get agents.defaults.model.primary
-```
+  config get agents.defaults.sandbox
 
-Restart gateway after model changes:
-
-```bash
-docker compose -f docker/docker-compose.yml --env-file .env restart openclaw-gateway
+# Expected:
+# {
+#   "mode": "non-main",
+#   "docker": { "image": "openclaw-sandbox:careerclaw" }
+# }
 ```
 
 ---
 
-## Step 11 — Install CareerClaw and Run a Briefing
+## Step 10 — Install CareerClaw Skill
 
-Install the skill (send in Telegram):
+### Option A — GitHub install (may hit rate limits)
 
-```text
-install skill from https://github.com/orestes-garcia-martinez/careerclaw
+Send to your Telegram bot:
+
+```
+Reinstall skill from https://github.com/orestes-garcia-martinez/careerclaw
 ```
 
-Dry run briefing (no tracking written):
+### Option B — Raw URL (always works, recommended)
 
-```text
+Send to your Telegram bot:
+
+```
+Update the careerclaw skill. Fetch the new SKILL.md from
+https://raw.githubusercontent.com/orestes-garcia-martinez/careerclaw/main/SKILL.md
+and replace the current skill definition.
+```
+
+---
+
+## Step 11 — Run a Briefing
+
+Dry run (nothing saved to tracking):
+
+```
 Run a dry-run job briefing
 ```
 
-Real briefing (saves tracking):
+Real run (saves to `.careerclaw/tracking.json`):
 
-```text
+```
 Run a job briefing
 ```
 
-Expected behavior:
+Expected output:
 - Top job matches (RemoteOK + HN Who's Hiring)
-- Fit analysis and gap analysis (Pro only)
-- Deterministic drafts (Free) or enhanced drafts (Pro, if configured)
-- Tracking written to `.careerclaw/`
+- Score, matched skills, location and fit warnings
+- Template drafts (Free) or LLM-enhanced drafts (Pro)
+- `Pro tier ✓` shown if `CAREERCLAW_PRO_KEY` is valid
+
+---
+
+## After Every Volume Reset — Checklist
+
+The named volume stores agent state. Any time it is deleted or recreated, run these in order:
+
+```bash
+# 1. Fix permissions
+docker run --rm -v careerclaw-openclaw-config:/data alpine chown -R 1000:1000 /data
+
+# 2. Start gateway
+docker compose -f docker/docker-compose.yml --env-file .env up -d openclaw-gateway
+
+# 3. Set sandbox mode
+docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
+  config set agents.defaults.sandbox.mode "non-main"
+
+# 4. Set agent model
+docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
+  config set agents.defaults.model.primary "openai/gpt-5.2"
+
+# 5. Restart
+docker compose -f docker/docker-compose.yml --env-file .env restart openclaw-gateway
+
+# 6. Pair Telegram (get code from bot first — send "hi")
+docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
+  pairing approve CODE
+
+# 7. Reinstall skill — send this to your Telegram bot:
+# Update the careerclaw skill. Fetch the new SKILL.md from
+# https://raw.githubusercontent.com/orestes-garcia-martinez/careerclaw/main/SKILL.md
+# and replace the current skill definition.
+```
+
+---
+
+## Updating CareerClaw After Code Changes
+
+```bash
+./update.sh           # full — rebuild image + prompt to refresh SKILL.md
+./update.sh --skill   # SKILL.md only (fastest, for instruction/presentation changes)
+./update.sh --code    # rebuild sandbox image only (for Python source changes)
+```
+
+| What changed | Command |
+|---|---|
+| `SKILL.md` only | `./update.sh --skill` |
+| Python source (`careerclaw/`) | `./update.sh --code` |
+| Both | `./update.sh` |
+
+---
+
+## Rate Limits
+
+| Limit | Cause | Fix |
+|-------|-------|-----|
+| GitHub API (60 req/hr unauthenticated) | Skill installs + git activity | Set `GITHUB_TOKEN` in `.env`. Use raw URL for SKILL.md. |
+| Anthropic API (daily token quota) | Heavy agent usage | Switch agent to `openai/gpt-5.2`. Resets at midnight UTC. |
+| HN Firebase | Rapid repeated briefings | Wait 15 minutes. |
+
+**Diagnosing which limit you hit:** Send `What is 2 + 2?` to the bot.
+- Answers `4` → agent is fine; error is in CareerClaw enhancement layer.
+- Also fails → the agent itself is hitting its provider limit.
+
+**Rate limit vs billing error:**
+- `API rate limit reached` → quota exhausted, resets automatically.
+- `API provider returned a billing error` → no credits. Top up or remove that provider from `CAREERCLAW_LLM_CHAIN`.
 
 ---
 
 ## Quick Command Reference
 
-All commands run from the CareerClaw repo root in WSL2.
+All commands from the CareerClaw repo root in WSL2.
 
 | Command | What it does |
-|--------|--------------|
+|---------|-------------|
 | `docker compose ... up -d openclaw-gateway` | Start the gateway |
-| `docker compose ... down` | Stop gateway + network |
+| `docker compose ... down` | Stop gateway + remove network |
+| `docker compose ... restart openclaw-gateway` | Restart after config changes |
 | `docker compose ... logs openclaw-gateway -f` | Stream gateway logs |
-| `docker compose ... run --rm openclaw-cli <cmd>` | Run a one-off CLI command |
-| `docker compose ... restart openclaw-gateway` | Restart gateway after config changes |
-| `docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .` | Rebuild sandbox after code changes |
+| `docker compose ... run --rm openclaw-cli <cmd>` | Run a CLI command |
+| `docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .` | Rebuild sandbox image |
 | `docker images \| grep openclaw` | List OpenClaw images |
-| `docker ps \| grep openclaw` | List running OpenClaw containers |
-| `docker volume rm careerclaw-openclaw-config` | Reset gateway state (destructive) |
+| `docker ps \| grep openclaw` | List running containers |
+| `docker volume rm careerclaw-openclaw-config` | Delete volume (destructive — triggers full reset) |
 | `docker run --rm -v careerclaw-openclaw-config:/data alpine chown -R 1000:1000 /data` | Fix volume permissions |
 
 > Every `docker compose` command requires: `-f docker/docker-compose.yml --env-file .env`
@@ -371,9 +401,8 @@ All commands run from the CareerClaw repo root in WSL2.
 | Path | Access | Purpose |
 |------|--------|---------|
 | `.careerclaw/` | Read + Write | Profile, resume, tracking, run logs |
-| `careerclaw/` source | None at runtime | Baked into sandbox image |
-| `docker/openclaw.yml` | Read-only (gateway) | Sandbox + agent configuration |
-| `docker/` other files | None at runtime | Used for build and compose only |
+| `careerclaw/` source | None at runtime | Baked into sandbox image at build time |
+| `docker/openclaw.yml` | Read-only (gateway) | Sandbox image + resource limits + env forwarding |
 | Windows filesystems | None | Not mounted |
 | Internet | Outbound allowed | RemoteOK + HN APIs |
 
@@ -382,46 +411,39 @@ All commands run from the CareerClaw repo root in WSL2.
 ## Troubleshooting
 
 ### `error getting credentials` when pulling images
-Fix WSL2 Docker credential helper (Step 1).
+Fix WSL2 credential helper (Step 1). Must be done before any `docker run`.
 
 ### `EACCES: permission denied` in gateway logs
-Fix volume ownership (Step 6), then restart.
+Run the `chown` command from Step 6, then restart the gateway.
 
-### Env vars show "variable is not set"
-Always use `--env-file .env` because the compose file lives in `docker/`.
+### `openclaw-sandbox:bookworm-slim` not found during build
+Update `Dockerfile.sandbox`: change `FROM openclaw-sandbox:bookworm-slim` to `FROM openclaw:local`. Rebuild.
 
-### Bot does not respond in Telegram
-Check gateway logs for `[telegram] starting provider`. If missing:
-- `TELEGRAM_BOT_TOKEN` is missing/invalid
-- volume permissions are broken (run Step 6)
+### Bot does not respond / "OpenClaw: access not configured"
+Volume was reset — pairing lost. Send `hi` to the bot, get the new code, run `pairing approve CODE`.
 
-### Agent says "No API key found for provider openai"
-Add `OPENAI_API_KEY` to `.env` and ensure it is forwarded into the gateway container.
+### Agent says "I don't know what a job briefing is"
+Skill was lost on volume reset. Reinstall using Option B (raw URL, Step 10).
 
-### CareerClaw drafts not LLM-enhanced
-Confirm:
-- Pro is enabled (`CAREERCLAW_PRO_KEY` valid and set in `.env`)
-- Resume intelligence is present (pass `--resume-text` or `--resume-pdf`)
-- `CAREERCLAW_OPENAI_KEY` or `CAREERCLAW_ANTHROPIC_KEY` is set in `.env`
-- Gateway has been restarted after `.env` changes
+### Agent says "Only the skill definition exists — no Python package"
+Sandbox mode is not set. Run Step 9 (`config set agents.defaults.sandbox.mode "non-main"`), then restart.
 
-### Sandbox container not starting / wrong image
-Verify the loaded config:
+### Drafts are template-only despite Pro key being set
+`CAREERCLAW_OPENAI_KEY` or `CAREERCLAW_ANTHROPIC_KEY` is empty in `.env`. Fill in the actual key values and restart the gateway.
 
+### `API provider returned a billing error`
+A provider key has no credits. Check:
+- OpenAI: https://platform.openai.com/settings/organization/billing
+- Anthropic: https://console.anthropic.com/settings/billing
+
+If Anthropic is negative, remove `anthropic/claude-sonnet-4-6` from `CAREERCLAW_LLM_CHAIN` in `.env` and restart.
+
+### Sandbox `mode` or agent model missing after volume reset
+Both are stored in the volume, not in `openclaw.yml`. Always re-run Step 9 after any volume reset.
+
+### Gateway hangs during `update.sh`
+Run the restart commands manually:
 ```bash
-docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli \
-  config get agents.defaults.sandbox
-```
-
-Make sure:
-- `docker.image` is `openclaw-sandbox:careerclaw`
-- `mode` is `non-main`
-
-If wrong, check that `docker/openclaw.yml` is present and the gateway has been restarted.
-
-### `openclaw-sandbox:careerclaw` image not found
-Rebuild it (Step 3):
-
-```bash
-docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
+docker compose -f docker/docker-compose.yml --env-file .env down
+docker compose -f docker/docker-compose.yml --env-file .env up -d openclaw-gateway
 ```
