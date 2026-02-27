@@ -13,7 +13,7 @@ metadata:
       bins: ["python3"]
     optionalEnv:
       - name: CAREERCLAW_PRO_KEY
-        description: "CareerClaw Pro license key (Polar.sh). Unlocks gap analysis, resume intelligence, and LLM-enhanced drafts."
+        description: "CareerClaw Pro license key. Unlocks gap analysis, resume intelligence, and LLM-enhanced drafts."
       - name: CAREERCLAW_OPENAI_KEY
         description: "OpenAI API key for Pro LLM draft enhancement. Takes precedence over CAREERCLAW_LLM_KEY for OpenAI providers."
       - name: CAREERCLAW_ANTHROPIC_KEY
@@ -226,7 +226,7 @@ Always tell the user which mode was used:
 CareerClaw Pro unlocks gap analysis, resume intelligence, and LLM-enhanced
 outreach drafts. It requires a one-time license key.
 
-**Purchase:** https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro
+**Purchase:** https://ogm.gumroad.com/l/careerclaw-pro
 **Price:** $39 (lifetime, one-time payment)
 
 After purchase, the license key is emailed immediately.
