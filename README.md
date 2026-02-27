@@ -143,13 +143,13 @@ role. I have 5 years of experience delivering production systems...
 | CSV / Sheets export                           | ❌    | ✅ (roadmap) |
 
 **Pro tier: $39 one-time (lifetime license).**
-Purchase at: https://orestes-garcia-martinez.lemonsqueezy.com/buy/careerclaw-pro
+Purchase at: https://ogm.gumroad.com/l/careerclaw-pro
 
 ---
 
 ## Pro: Upgrading
 
-Purchase a license key at the link above. LemonSqueezy delivers the key
+Purchase a license key at the link above. Gumroad delivers the key
 by email immediately after payment.
 
 ### Activating — Docker / self-hosted users
@@ -395,13 +395,13 @@ leaves your machine unless you configure an LLM key.
 - **API keys never stored.** `CAREERCLAW_LLM_KEY` is read from the
   environment at runtime and never written to disk or logs.
 - **License cache is hash-only.** `CAREERCLAW_PRO_KEY` is validated
-  against LemonSqueezy on first use. Only a SHA-256 hash of the key is
+  against Gumroad on first use. Only a SHA-256 hash of the key is
   written to `.careerclaw/.license_cache` — the raw key is never stored.
 - **No PII transmission.** Your resume, profile, and application history
   are stored only in `.careerclaw/` on your local machine.
 - **External calls:** `remoteok.com` (RSS, no auth),
   `hacker-news.firebaseio.com` (public API, no auth), and
-  `api.lemonsqueezy.com` (license validation only) only.
+  `api.gumroad.com` (license validation only) only.
 - **LLM calls** go directly to your configured provider (Anthropic or
   OpenAI) using your own key — no CareerClaw server in the middle.
 - **VirusTotal clean** on every release.
