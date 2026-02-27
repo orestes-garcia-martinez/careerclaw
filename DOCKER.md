@@ -131,7 +131,7 @@ docker images | grep careerclaw
 # Expected: openclaw-sandbox   careerclaw   ...
 ```
 
-> Rebuild any time you update Python source code in `careerclaw/`.
+> ⚠️ **Local testing vs ClawHub deployment:** Rebuilding this image updates the **ClawHub deployment artifact** — it does NOT update the code the gateway uses during local testing. For local testing, the gateway clones your GitHub repo and runs code from there. See "Updating CareerClaw After Code Changes" below for the correct workflow.
 
 ---
 
@@ -343,17 +343,41 @@ docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cl
 
 ## Updating CareerClaw After Code Changes
 
+> ⚠️ **Two separate update paths exist** depending on what you are updating.
+
+### Local testing — gateway runs from a cloned GitHub repo
+
+The gateway clones your repo into `/home/node/.openclaw/workspace/.careerclaw-repo/`
+and runs Python code directly from there. Rebuilding the sandbox image has **no effect**
+on local testing. The correct workflow is:
+
+1. `git push` your changes to GitHub
+2. `./update.sh --repo` — pulls latest code into the gateway's repo clone
+3. `./update.sh --skill` — if `SKILL.md` also changed
+
+No gateway restart is needed after a `--repo` pull.
+
+### ClawHub deployment — sandbox image is the artifact
+
+When publishing to ClawHub, the `openclaw-sandbox:careerclaw` image is what gets deployed.
+Rebuild it after any Python source change:
+
+1. `git push` your changes to GitHub
+2. `./update.sh --code` — rebuilds `openclaw-sandbox:careerclaw`
+3. `./update.sh --skill` — if `SKILL.md` also changed
+
 ```bash
-./update.sh           # full — rebuild image + prompt to refresh SKILL.md
-./update.sh --skill   # SKILL.md only (fastest, for instruction/presentation changes)
-./update.sh --code    # rebuild sandbox image only (for Python source changes)
+./update.sh --repo    # pull latest code into gateway repo (local testing)
+./update.sh --skill   # SKILL.md only (both workflows)
+./update.sh --code    # rebuild sandbox image (ClawHub deployment only)
+./update.sh           # rebuild image + prompt to refresh SKILL.md
 ```
 
-| What changed | Command |
-|---|---|
-| `SKILL.md` only | `./update.sh --skill` |
-| Python source (`careerclaw/`) | `./update.sh --code` |
-| Both | `./update.sh` |
+| What changed | Local testing | ClawHub deployment |
+|---|---|---|
+| Python source only | `./update.sh --repo` | `./update.sh --code` |
+| `SKILL.md` only | `./update.sh --skill` | `./update.sh --skill` |
+| Both | `./update.sh --repo && ./update.sh --skill` | `./update.sh` |
 
 ---
 
