@@ -10,6 +10,28 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ---
 
+## [0.7.1] - 2026-02-26
+
+### Changed
+- Migrated Pro license validation from Polar.sh to Gumroad
+  (`careerclaw/license.py`). Replaced separate activate/validate API
+  calls with Gumroad's single `/v2/licenses/verify` endpoint.
+- Revalidation calls now set `increment_uses_count=false` to avoid
+  burning customer usage quota on routine 7-day rechecks.
+- Updated buy link to `https://ogm.gumroad.com/l/careerclaw-pro` in
+  `README.md`.
+
+### Fixed
+- Removed dependency on Polar activation IDs (`activation_id`) from
+  cache schema; cache now stores only `key_hash`, `valid`, and
+  `validated_at`.
+
+### Security
+- Pro license key is never written to disk; only SHA-256 hash cached.
+  Gumroad Product ID is a public identifier and safe to commit.
+
+---
+
 ## [0.7.0] - 2026-02-24
 
 ### Added

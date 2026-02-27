@@ -2,7 +2,7 @@
 #
 # Tests for careerclaw/license.py
 #
-# All tests mock LemonSqueezy network calls and the cache file — no real
+# All tests mock Gumroad network calls and the cache file — no real
 # HTTP requests are made, no disk state is left behind.
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,20 +20,6 @@ from careerclaw import license as lic
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 FAKE_KEY = "TEST-1234-ABCD-5678"
-FAKE_INSTANCE_ID = "inst-abc-123"
-
-
-def _make_activate_response(*, activated: bool, instance_id: str | None = FAKE_INSTANCE_ID) -> dict:
-    if not activated:
-        return {"activated": False, "error": "invalid key"}
-    return {
-        "activated": True,
-        "instance": {"id": instance_id},
-    }
-
-
-def _make_validate_response(*, valid: bool) -> dict:
-    return {"valid": valid}
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -56,61 +42,65 @@ def test_empty_string_returns_false():
     assert lic.pro_licensed("") is False
 
 
-# ── First use: activation ─────────────────────────────────────────────────────
+# ── First use: verify ─────────────────────────────────────────────────────────
 
-def test_first_use_valid_key_activates_and_returns_true():
-    with patch.object(lic, "_activate", return_value=(True, FAKE_INSTANCE_ID)):
+def test_first_use_valid_key_returns_true():
+    with patch.object(lic, "_gr_verify", return_value=True):
         result = lic.pro_licensed(FAKE_KEY)
     assert result is True
 
 
 def test_first_use_valid_key_writes_cache():
-    with patch.object(lic, "_activate", return_value=(True, FAKE_INSTANCE_ID)):
+    with patch.object(lic, "_gr_verify", return_value=True):
         lic.pro_licensed(FAKE_KEY)
     cache = json.loads(lic._cache_path().read_text())
     assert cache["valid"] is True
-    assert cache["instance_id"] == FAKE_INSTANCE_ID
     assert cache["key_hash"] == lic._key_hash(FAKE_KEY)
+    assert "validated_at" in cache
+    # Raw key must never be stored
+    assert FAKE_KEY not in lic._cache_path().read_text()
 
 
 def test_first_use_invalid_key_returns_false(capsys):
-    with patch.object(lic, "_activate", return_value=(False, None)):
+    with patch.object(lic, "_gr_verify", return_value=False):
         result = lic.pro_licensed(FAKE_KEY)
     assert result is False
     assert "free tier" in capsys.readouterr().err
 
 
 def test_first_use_network_failure_returns_false(capsys):
-    with patch.object(lic, "_activate", return_value=(False, None)):
+    with patch.object(lic, "_gr_verify", return_value=None):
         result = lic.pro_licensed(FAKE_KEY)
     assert result is False
+    assert "free tier" in capsys.readouterr().err
+
+
+def test_first_use_increments_usage():
+    """First use must call _gr_verify with increment_uses=True."""
+    with patch.object(lic, "_gr_verify", return_value=True) as mock_verify:
+        lic.pro_licensed(FAKE_KEY)
+    mock_verify.assert_called_once_with(FAKE_KEY, increment_uses=True)
 
 
 # ── Cache hit: fresh ──────────────────────────────────────────────────────────
 
 def test_fresh_cache_valid_returns_true_without_network():
-    # Write a fresh valid cache.
-    lic._write_cache(FAKE_KEY, valid=True, instance_id=FAKE_INSTANCE_ID)
+    lic._write_cache(FAKE_KEY, valid=True)
 
-    with patch.object(lic, "_activate") as mock_activate, \
-         patch.object(lic, "_validate_remote") as mock_validate:
+    with patch.object(lic, "_gr_verify") as mock_verify:
         result = lic.pro_licensed(FAKE_KEY)
 
-    # No network calls should happen.
-    mock_activate.assert_not_called()
-    mock_validate.assert_not_called()
+    mock_verify.assert_not_called()
     assert result is True
 
 
 def test_fresh_cache_invalid_returns_false_without_network():
-    lic._write_cache(FAKE_KEY, valid=False, instance_id=FAKE_INSTANCE_ID)
+    lic._write_cache(FAKE_KEY, valid=False)
 
-    with patch.object(lic, "_activate") as mock_activate, \
-         patch.object(lic, "_validate_remote") as mock_validate:
+    with patch.object(lic, "_gr_verify") as mock_verify:
         result = lic.pro_licensed(FAKE_KEY)
 
-    mock_activate.assert_not_called()
-    mock_validate.assert_not_called()
+    mock_verify.assert_not_called()
     assert result is False
 
 
@@ -124,7 +114,6 @@ def _write_stale_cache(key: str, *, valid: bool, age_seconds: float):
         "key_hash": lic._key_hash(key),
         "valid": valid,
         "validated_at": time.time() - age_seconds,
-        "instance_id": FAKE_INSTANCE_ID,
     }
     path.write_text(json.dumps(payload))
 
@@ -133,21 +122,31 @@ def test_stale_cache_remote_valid_refreshes_cache():
     stale_age = lic._REVALIDATE_INTERVAL_SECONDS + 100
     _write_stale_cache(FAKE_KEY, valid=True, age_seconds=stale_age)
 
-    with patch.object(lic, "_validate_remote", return_value=True):
+    with patch.object(lic, "_gr_verify", return_value=True):
         result = lic.pro_licensed(FAKE_KEY)
 
     assert result is True
-    # Cache should be refreshed (validated_at updated).
     cache = json.loads(lic._cache_path().read_text())
     age = time.time() - cache["validated_at"]
     assert age < 5  # refreshed within last 5 seconds
+
+
+def test_stale_cache_revalidation_does_not_increment_usage():
+    """Revalidation must call _gr_verify with increment_uses=False."""
+    stale_age = lic._REVALIDATE_INTERVAL_SECONDS + 100
+    _write_stale_cache(FAKE_KEY, valid=True, age_seconds=stale_age)
+
+    with patch.object(lic, "_gr_verify", return_value=True) as mock_verify:
+        lic.pro_licensed(FAKE_KEY)
+
+    mock_verify.assert_called_once_with(FAKE_KEY, increment_uses=False)
 
 
 def test_stale_cache_remote_invalid_returns_false(capsys):
     stale_age = lic._REVALIDATE_INTERVAL_SECONDS + 100
     _write_stale_cache(FAKE_KEY, valid=True, age_seconds=stale_age)
 
-    with patch.object(lic, "_validate_remote", return_value=False):
+    with patch.object(lic, "_gr_verify", return_value=False):
         result = lic.pro_licensed(FAKE_KEY)
 
     assert result is False
@@ -157,22 +156,20 @@ def test_stale_cache_remote_invalid_returns_false(capsys):
 # ── Grace period ──────────────────────────────────────────────────────────────
 
 def test_stale_cache_network_failure_within_grace_returns_true():
-    # Stale by 8 days (just past 7-day revalidation window, within 24h grace).
     stale_age = lic._REVALIDATE_INTERVAL_SECONDS + 3600  # 7 days + 1 hour
     _write_stale_cache(FAKE_KEY, valid=True, age_seconds=stale_age)
 
-    with patch.object(lic, "_validate_remote", return_value=None):  # None = network failure
+    with patch.object(lic, "_gr_verify", return_value=None):
         result = lic.pro_licensed(FAKE_KEY)
 
     assert result is True
 
 
 def test_stale_cache_network_failure_beyond_grace_returns_false(capsys):
-    # Stale by 9 days (past 7-day window + past 24h grace).
     stale_age = lic._REVALIDATE_INTERVAL_SECONDS + lic._GRACE_PERIOD_SECONDS + 3600
     _write_stale_cache(FAKE_KEY, valid=True, age_seconds=stale_age)
 
-    with patch.object(lic, "_validate_remote", return_value=None):
+    with patch.object(lic, "_gr_verify", return_value=None):
         result = lic.pro_licensed(FAKE_KEY)
 
     assert result is False
@@ -183,10 +180,10 @@ def test_stale_cache_network_failure_beyond_grace_returns_false(capsys):
 
 def test_different_key_ignores_existing_cache():
     """Cache for key A must not unlock Pro for key B."""
-    lic._write_cache(FAKE_KEY, valid=True, instance_id=FAKE_INSTANCE_ID)
+    lic._write_cache(FAKE_KEY, valid=True)
 
     different_key = "DIFFERENT-KEY-9999"
-    with patch.object(lic, "_activate", return_value=(False, None)):
+    with patch.object(lic, "_gr_verify", return_value=False):
         result = lic.pro_licensed(different_key)
 
     assert result is False
@@ -196,7 +193,6 @@ def test_different_key_ignores_existing_cache():
 
 def test_config_pro_licensed_no_env_returns_false(monkeypatch):
     monkeypatch.delenv("CAREERCLAW_PRO_KEY", raising=False)
-    # Re-import config to pick up env change.
     import importlib
     from careerclaw import config
     importlib.reload(config)
@@ -209,7 +205,7 @@ def test_config_pro_licensed_with_valid_key(monkeypatch):
     from careerclaw import config
     importlib.reload(config)
 
-    with patch.object(lic, "_activate", return_value=(True, FAKE_INSTANCE_ID)):
+    with patch.object(lic, "_gr_verify", return_value=True):
         result = config.pro_licensed()
 
     assert result is True
