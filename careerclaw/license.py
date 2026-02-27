@@ -1,14 +1,17 @@
 # careerclaw/license.py
 #
-# Handles CareerClaw Pro license validation via LemonSqueezy.
+# Handles CareerClaw Pro license validation via Gumroad.
 #
 # Flow:
-#   1. On first use: activate the key against LemonSqueezy API (consumes 1 activation slot).
+#   1. On first use: verify the key against Gumroad API.
 #   2. Write a local cache file (.careerclaw/.license_cache) with key hash + timestamp.
-#   3. On later runs: read cache. Re-validate against LemonSqueezy every 7 days.
-#   4. If LemonSqueezy is unreachable: allow a 24h grace period before downgrading to free.
+#   3. On later runs: read cache. Re-validate against Gumroad every 7 days.
+#   4. If Gumroad is unreachable: allow a 24h grace period before downgrading to free.
 #
 # The raw license key is NEVER written to disk — only a SHA-256 hash is cached.
+#
+# Note: Gumroad uses a single /verify endpoint for both first use and revalidation.
+#       We set increment_uses_count=false on revalidation to avoid burning usage quota.
 
 from __future__ import annotations
 
@@ -22,13 +25,12 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-# ── LemonSqueezy product identifiers ─────────────────────────────────────────
+# ── Gumroad product identifier ────────────────────────────────────────────────
+# Found in your Gumroad product → Content page → License key module → product_id
+# Required for products created after Jan 9 2023.
 
-_LS_PRODUCT_ID = 847188
-_LS_VARIANT_ID = 1334876
-_LS_ACTIVATE_URL = "https://api.lemonsqueezy.com/v1/licenses/activate"
-_LS_VALIDATE_URL = "https://api.lemonsqueezy.com/v1/licenses/validate"
-_INSTANCE_NAME = "careerclaw-local"
+_GR_PRODUCT_ID = "RFgXMtGajXKJfDvpZOXtfA=="
+_GR_VERIFY_URL = "https://api.gumroad.com/v2/licenses/verify"
 
 # ── Cache settings ────────────────────────────────────────────────────────────
 
@@ -65,7 +67,7 @@ def _read_cache(key: str) -> Optional[dict]:
         return None
 
 
-def _write_cache(key: str, *, valid: bool, instance_id: Optional[str] = None) -> None:
+def _write_cache(key: str, *, valid: bool) -> None:
     """Write (or overwrite) the cache file."""
     path = _cache_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +75,6 @@ def _write_cache(key: str, *, valid: bool, instance_id: Optional[str] = None) ->
         "key_hash": _key_hash(key),
         "valid": valid,
         "validated_at": time.time(),
-        "instance_id": instance_id or "",
     }
     try:
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -81,16 +82,20 @@ def _write_cache(key: str, *, valid: bool, instance_id: Optional[str] = None) ->
         pass  # cache write failure never blocks a run
 
 
-def _ls_post(url: str, params: dict) -> dict:
+def _gr_verify(key: str, *, increment_uses: bool = True) -> Optional[bool]:
     """
-    POST to a LemonSqueezy license endpoint.
-    Raises urllib.error.URLError on network failure.
-    Raises ValueError on non-200 status or invalid JSON.
+    POST to Gumroad's license verify endpoint.
+    Returns True if valid, False if invalid/refunded, None on network failure.
     """
-    body = urllib.parse.urlencode(params).encode()
+    params = urllib.parse.urlencode({
+        "product_id": _GR_PRODUCT_ID,
+        "license_key": key,
+        "increment_uses_count": "true" if increment_uses else "false",
+    }).encode()
+
     req = urllib.request.Request(
-        url,
-        data=body,
+        _GR_VERIFY_URL,
+        data=params,
         headers={
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
@@ -99,50 +104,20 @@ def _ls_post(url: str, params: dict) -> dict:
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            raw = resp.read().decode()
-            return json.loads(raw)
+            data = json.loads(resp.read().decode())
+            if not data.get("success"):
+                return False
+            purchase = data.get("purchase") or {}
+            # Treat refunded or chargebacked purchases as invalid
+            if purchase.get("refunded") or purchase.get("chargebacked"):
+                return False
+            return True
     except urllib.error.HTTPError as e:
-        raw = e.read().decode()
-        try:
-            return json.loads(raw)
-        except Exception:
-            raise ValueError(f"LemonSqueezy returned HTTP {e.code}: {raw}") from e
-
-
-def _activate(key: str) -> tuple[bool, Optional[str]]:
-    """
-    Activate the key. Returns (success, instance_id).
-    instance_id is needed for future validate calls.
-    """
-    try:
-        resp = _ls_post(_LS_ACTIVATE_URL, {
-            "license_key": key,
-            "instance_name": _INSTANCE_NAME,
-        })
-        activated = resp.get("activated", False)
-        instance_id = (resp.get("instance") or {}).get("id")
-        return bool(activated), instance_id
+        if e.code == 404:
+            return False  # key does not exist
+        return None       # other HTTP error — treat as network failure
     except urllib.error.URLError:
-        return False, None
-    except ValueError:
-        return False, None
-
-
-def _validate_remote(key: str, instance_id: str) -> Optional[bool]:
-    """
-    Validate an already-activated key.
-    Returns True/False, or None if the network call failed (caller applies grace period).
-    """
-    try:
-        resp = _ls_post(_LS_VALIDATE_URL, {
-            "license_key": key,
-            "instance_id": instance_id,
-        })
-        return bool(resp.get("valid", False))
-    except urllib.error.URLError:
-        return None  # network failure — caller decides grace
-    except ValueError:
-        return False
+        return None       # network failure — caller applies grace period
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -154,15 +129,14 @@ def pro_licensed(key: Optional[str] = None) -> bool:
     Decision tree:
       1. No key → free tier.
       2. Cache hit + same key + validated recently (< 7 days) → Pro.
-      3. Cache hit + same key + stale → re-validate remotely.
+      3. Cache hit + same key + stale → re-validate remotely (no usage increment).
          - Remote says valid → update cache → Pro.
-         - Remote unreachable + last validated < 24h ago → grace → Pro.
-         - Remote unreachable + last validated >= 24h ago → free + warning.
+         - Remote unreachable + within grace period → Pro (grace).
+         - Remote unreachable + grace expired → free + warning.
          - Remote says invalid → update cache (invalid) → free + warning.
-      4. No cache (first use) → activate remotely.
-         - Activation success → write cache → Pro.
-         - Activation failure (network) → free + warning.
-         - Activation failure (invalid key) → free + warning.
+      4. No cache (first use) → verify remotely (increments usage once).
+         - Valid → write cache → Pro.
+         - Invalid or network failure → free + warning.
     """
     if not key:
         return False
@@ -178,12 +152,11 @@ def pro_licensed(key: Optional[str] = None) -> bool:
         if age < _REVALIDATE_INTERVAL_SECONDS:
             return bool(cache.get("valid", False))
 
-        # Cache is stale — re-validate remotely.
-        instance_id = cache.get("instance_id", "")
-        remote_result = _validate_remote(key, instance_id)
+        # Cache is stale — re-validate without incrementing uses.
+        remote_result = _gr_verify(key, increment_uses=False)
 
         if remote_result is True:
-            _write_cache(key, valid=True, instance_id=instance_id)
+            _write_cache(key, valid=True)
             return True
 
         if remote_result is None:
@@ -198,33 +171,31 @@ def pro_licensed(key: Optional[str] = None) -> bool:
                 )
                 return False
 
-        # Remote says invalid.
-        _write_cache(key, valid=False, instance_id=instance_id)
+        # Remote says invalid (refunded, chargebacked, or bad key).
+        _write_cache(key, valid=False)
         print(
             "[CareerClaw] Pro license is no longer valid. Running in free tier.",
             file=sys.stderr,
         )
         return False
 
-    # No cache — first use. Attempt activation.
-    activated, instance_id = _activate(key)
+    # No cache — first use. Verify and increment usage count.
+    remote_result = _gr_verify(key, increment_uses=True)
 
-    if activated and instance_id:
-        _write_cache(key, valid=True, instance_id=instance_id)
+    if remote_result is True:
+        _write_cache(key, valid=True)
         return True
 
-    if instance_id is None and not activated:
-        # Could be a network failure or an invalid key.
-        # We can't distinguish without a successful response, so fail safe.
+    if remote_result is None:
         print(
-            "[CareerClaw] Could not activate Pro license. "
+            "[CareerClaw] Could not reach license server. "
             "Check your CAREERCLAW_PRO_KEY and internet connection. Running in free tier.",
             file=sys.stderr,
         )
         return False
 
     print(
-        "[CareerClaw] Pro license activation failed. Running in free tier.",
+        "[CareerClaw] Pro license key is invalid or has been refunded. Running in free tier.",
         file=sys.stderr,
     )
     return False
