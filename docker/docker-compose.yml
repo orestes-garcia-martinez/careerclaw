@@ -5,7 +5,7 @@
 #
 # Usage:
 #   First run:  ./docker-setup.sh   (from the official openclaw repo)
-#   Build sandbox: docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
+#   Build sandbox: docker build -f docker/Dockerfile.sandbox.local -t openclaw-sandbox:careerclaw .
 #   Start:      docker compose -f docker/docker-compose.yml --env-file .env up -d openclaw-gateway
 #   CLI:        docker compose -f docker/docker-compose.yml --env-file .env run --rm openclaw-cli <command>
 #
@@ -21,7 +21,7 @@
 #   - Docker Desktop with WSL2 backend
 #   - .env file at repo root (copy from .env.example and fill in values)
 #   - openclaw:local image (built by openclaw's own docker-setup.sh)
-#   - openclaw-sandbox:careerclaw image (built from docker/Dockerfile.sandbox)
+#   - openclaw-sandbox:careerclaw image (built from docker/Dockerfile.sandbox.local)
 #
 # Isolation contract:
 #   - Gateway and agent sandbox run in Docker
@@ -74,7 +74,7 @@ services:
       # These are read by the gateway and forwarded into sandbox containers via
       # the env: block in docker/openclaw.yml. Do not remove them from here.
 
-      # Pro license key (Polar.sh) — leave blank for free-tier mode
+      # Pro license key (Gumroad) — leave blank for free-tier mode
       CAREERCLAW_PRO_KEY: ${CAREERCLAW_PRO_KEY:-}
 
       # Provider-specific keys for Pro LLM draft enhancement

@@ -1,0 +1,52 @@
+# docker/Dockerfile.sandbox.careerclaw
+#
+# Published CareerClaw sandbox image:
+# - installs CareerClaw from PyPI (pinned)
+# - exposes `careerclaw` CLI in PATH
+# - runs as non-root (sandbox user)
+#
+# This should NOT replace docker/Dockerfile.sandbox (local dev image).
+#
+FROM debian:bookworm-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG CAREERCLAW_VERSION=0.7.1
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_NO_PROGRESS=1
+
+# Base tools + python runtime
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      bash \
+      ca-certificates \
+      curl \
+      git \
+      jq \
+      python3 \
+      python3-pip \
+      python3-venv \
+      ripgrep \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install uv + CareerClaw pinned (system-wide so all users can run it)
+RUN python3 -m pip install -U "uv>=0.5" \
+ && uv pip install --system "careerclaw==${CAREERCLAW_VERSION}" \
+ && careerclaw --help >/dev/null
+
+# Non-root user (matches common OpenClaw sandbox expectations)
+RUN useradd --create-home --shell /bin/bash sandbox \
+ && mkdir -p /home/sandbox/.careerclaw \
+ && chown -R sandbox:sandbox /home/sandbox
+
+USER sandbox
+WORKDIR /home/sandbox
+
+# Sanity check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD careerclaw --help >/dev/null || exit 1
+
+# Keep container alive (OpenClaw typically execs commands into the sandbox)
+CMD ["sleep", "infinity"]
