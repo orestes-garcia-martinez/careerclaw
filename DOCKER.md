@@ -121,7 +121,7 @@ Run from the **CareerClaw repo root** (the build context must be `.`):
 ```bash
 cd /mnt/d/02_clawhub-monetization/careerclaw
 
-docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
+docker build -f docker/Dockerfile.sandbox.local -t openclaw-sandbox:careerclaw .
 ```
 
 Verify:

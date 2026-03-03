@@ -9,21 +9,25 @@ metadata:
   openclaw:
     emoji: "🦞"
     primaryEnv: CAREERCLAW_PRO_KEY
+
+    # careerclaw CLI is installed automatically via pip if not already present.
+    # No manual setup or sandbox image configuration required.
     requires:
       bins: ["python3"]
+
     optionalEnv:
       - name: CAREERCLAW_PRO_KEY
         description: "CareerClaw Pro license key. Unlocks gap analysis, resume intelligence, and LLM-enhanced drafts."
       - name: CAREERCLAW_OPENAI_KEY
-        description: "OpenAI API key for Pro LLM draft enhancement. Takes precedence over CAREERCLAW_LLM_KEY for OpenAI providers."
+        description: "OpenAI API key for Pro LLM draft enhancement."
       - name: CAREERCLAW_ANTHROPIC_KEY
-        description: "Anthropic API key for Pro LLM draft enhancement. Takes precedence over CAREERCLAW_LLM_KEY for Anthropic providers."
+        description: "Anthropic API key for Pro LLM draft enhancement."
       - name: CAREERCLAW_LLM_KEY
-        description: "Legacy single-provider API key override. Prefer CAREERCLAW_OPENAI_KEY / CAREERCLAW_ANTHROPIC_KEY for mixed failover chains."
+        description: "Legacy single-provider API key override. Prefer provider-specific keys above."
       - name: CAREERCLAW_LLM_PROVIDER
         description: "'anthropic' (default) or 'openai'. Ignored when CAREERCLAW_LLM_CHAIN is set."
       - name: CAREERCLAW_LLM_MODEL
-        description: "Override the default model. Defaults: claude-sonnet-4-6 (Anthropic) / gpt-4o-mini (OpenAI)."
+        description: "Override the default model."
       - name: CAREERCLAW_LLM_CHAIN
         description: "Ordered failover chain, e.g. 'openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6'."
       - name: CAREERCLAW_LLM_MAX_RETRIES
@@ -34,27 +38,44 @@ metadata:
 
 # CareerClaw
 
-Fetch job listings from RemoteOK and Hacker News Who's Hiring, rank them
-against the user's profile, generate tailored outreach email drafts, and
-persist an application tracking log — all locally, with no backend.
+Fetch job listings from RemoteOK and Hacker News Who's Hiring, rank them against the user's
+profile, generate tailored outreach email drafts, and persist an application tracking log —
+all locally, with no backend.
+
+---
+
+## Before Running Any Command
+
+Before executing any CareerClaw command, always run this self-healing check first:
+
+```bash
+careerclaw --help >/dev/null 2>&1 || python3 -m pip install --quiet careerclaw
+```
+
+This ensures CareerClaw is installed in any environment — sandbox, host, or managed cloud —
+with zero manual intervention. If CareerClaw is already installed, the check completes
+instantly and proceeds.
 
 ---
 
 ## First Run: Setup
 
-### Step 1 — Install
+### Step 1 — Create the working directory
 
-> **Docker / sandbox users: skip this step.** CareerClaw is pre-installed
-> in the sandbox image. Jump straight to Step 2.
 ```bash
-pip install -e .
 mkdir -p .careerclaw
 ```
 
-### Step 2 — Create the user profile from their resume
+### Step 2 — Share the resume
 
-Ask the user to provide their resume (PDF or plain text file). Do not
-ask them to fill in a JSON form.
+Ask the user to provide their resume (PDF or plain text file). Do not ask them to fill
+in a JSON form.
+
+Save the resume file to:
+- `.careerclaw/resume.txt` (preferred), or
+- `.careerclaw/resume.pdf`
+
+### Step 3 — Create the user profile from their resume
 
 Read the resume and extract the following fields:
 
@@ -86,87 +107,60 @@ Once you have all values, write `.careerclaw/profile.json`:
 }
 ```
 
-Save the resume file to `.careerclaw/resume.txt` (or `.careerclaw/resume.pdf`)
-so it can be passed on every subsequent run for better match quality.
+Confirm the profile with the user before proceeding, showing the extracted values.
+Offer to correct any field they disagree with.
 
-Confirm the profile with the user before proceeding, showing the
-extracted values. Offer to correct any field they disagree with.
+### Step 4 — Run the first briefing (dry run)
 
-### Step 3 — Run the first briefing
-
-Once the profile is confirmed, use the **`bash` tool** to immediately run:
+Once the profile is confirmed, run:
 
 ```bash
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --dry-run
+careerclaw --help >/dev/null 2>&1 || python3 -m pip install --quiet careerclaw
+careerclaw briefing --resume-text .careerclaw/resume.txt --dry-run
 ```
 
 (Use `--resume-pdf` if the resume was provided as a PDF.)
 
-Use `--dry-run` for the first run so nothing is written until the user
-confirms they are happy with the results.
+Use `--dry-run` for the first run so nothing is written until the user confirms
+they are happy with the results.
 
 ---
 
 ## Running the Daily Briefing
 
-> **Always use the `bash` tool to execute these commands.** CareerClaw
-> runs inside a Python sandbox — never attempt to execute it inline.
+Always run the self-healing check before executing any briefing command:
+
+```bash
+careerclaw --help >/dev/null 2>&1 || python3 -m pip install --quiet careerclaw
+```
+
+Then run the briefing:
 
 ```bash
 # Standard run (writes tracking.json and runs.jsonl)
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt
+careerclaw briefing --resume-text .careerclaw/resume.txt
 
 # Dry run — no files written, safe for previewing
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --dry-run
+careerclaw briefing --resume-text .careerclaw/resume.txt --dry-run
 
 # JSON-only output (for agent parsing)
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --json
+careerclaw briefing --resume-text .careerclaw/resume.txt --json
 
 # Control analysis verbosity
-python -m careerclaw.briefing --analysis off      # no gap analysis (default)
-python -m careerclaw.briefing --analysis summary  # fit % and highlights
-python -m careerclaw.briefing --analysis full     # gap keywords and phrases
+careerclaw briefing --analysis off      # no gap analysis (default)
+careerclaw briefing --analysis summary  # fit % and highlights
+careerclaw briefing --analysis full     # gap keywords and phrases
 
 # Return more than 3 results
-python -m careerclaw.briefing --top-k 5
+careerclaw briefing --top-k 5
 ```
 
-**Always pass `--resume-text` or `--resume-pdf` on every run** to ensure
-resume intelligence is active. Without it, fit scores will be low (1–5%)
-though match scores remain valid.
-
-**Use `--dry-run` when the user just wants to see matches** without
-updating their tracking log.
-
----
-
-## Interpreting the Output
-
-**Console summary fields:**
-
-- `score` — composite match score (0.0–1.0). Higher is better.
-- `fit` — resume-to-job overlap percentage.
-- `matches` — skills/keywords found in both the job and the user's profile.
-- `highlights` — top resume signals relevant to this role (summary mode).
-
-**JSON top-level fields:**
-
-- `fetched_jobs` — total jobs retrieved before deduplication
-- `top_matches` — ranked list with scores, explanation, and gap analysis
-- `drafts` — outreach email drafts per job (`channel: "email"`)
-- `tracking` — new entries created vs already-present
-- `duration_ms` — pipeline runtime
-- `resume_intelligence` — extracted keywords and phrase signals
-
-**Draft format:** Each draft contains a `Subject:` line followed by the
-email body. Present both to the user.
+**Always pass `--resume-text` or `--resume-pdf` on every run** to ensure resume intelligence
+is active. Without it, fit scores will be low (1–5%) though match scores remain valid.
 
 ---
 
 ## Presenting Results to the User
-
-Follow these rules every time you present briefing results in a chat
-interface (Telegram, Discord, etc.).
 
 ### Matches
 
@@ -175,56 +169,33 @@ For each match, always show:
 - Location and work mode
 - Score (and fit % if available)
 - 1–2 matched skills or keywords
-- Any relevant warning (e.g. entry-level listing, location mismatch,
-  LATAM-only, contract vs full-time)
+- Any relevant warning (e.g. entry-level listing, location mismatch, LATAM-only, contract vs full-time)
 
 ### Drafts
 
-The `drafts` field in the JSON output contains full outreach **email
-drafts** — not summaries. Each draft has a `Subject:` line and a
-complete email body ready to send.
+The `drafts` field in the JSON output contains full outreach email drafts. Each draft has
+a `Subject:` line and a complete email body ready to send.
 
-**Always follow these rules when presenting drafts:**
-
-1. Make it explicit that these are **email drafts** — do not let the
-   user assume they are just summaries or notes.
-2. In a chat interface, show a one-sentence summary of each draft's
-   angle to keep the briefing readable (e.g. "Leads with your React +
-   TypeScript stack and positions your AI experience as a differentiator").
-3. Always close the results with this offer:
-
-   > "Each match has a full outreach email draft ready — subject line
-   > and complete body. Want me to show the full email for any of these?"
-
-4. When the user asks for a full draft, output the complete `Subject:`
-   line and email body verbatim from the JSON. Do not paraphrase or
-   shorten it.
-5. If `"enhanced": true` on a draft, tell the user it is
-   **LLM-enhanced** and personalized from their resume signals.
-   If `"enhanced": false`, tell the user it is a **template draft**
-   and offer to upgrade via `CAREERCLAW_ANTHROPIC_KEY` or
-   `CAREERCLAW_OPENAI_KEY` if not already set.
+Rules:
+1. Make it explicit these are email drafts (not summaries).
+2. In chat, show a one-sentence summary of each draft's angle to keep results readable.
+3. Offer: "Want the full email for any of these?"
+4. When asked, output the full `Subject:` line + email body verbatim from JSON.
+5. If `"enhanced": true`, say it is LLM-enhanced. If `"enhanced": false`, say it is a template draft.
 
 ### After the briefing
 
-Always end with a clear next-step prompt, for example:
-
-> "Want the full email for any of these? I can also update a job's
-> tracking status, bump to more results with `--top-k 5`, or run a
-> dry-run if you just want to preview without saving."
-
-### Dry-run vs real run
-
-Always tell the user which mode was used:
-- Dry run: "This was a **dry run** — nothing was saved to your tracking log."
-- Real run: "**N jobs saved** to your tracking log."
+Always end with a next-step prompt:
+- show full drafts
+- bump results (`--top-k 5`)
+- update tracking status
+- run a dry-run preview
 
 ---
 
 ## Upgrading to Pro
 
-CareerClaw Pro unlocks gap analysis, resume intelligence, and LLM-enhanced
-outreach drafts. It requires a one-time license key.
+CareerClaw Pro unlocks gap analysis, resume intelligence, and LLM-enhanced outreach drafts.
 
 **Purchase:** https://ogm.gumroad.com/l/careerclaw-pro
 **Price:** $39 (lifetime, one-time payment)
@@ -233,105 +204,32 @@ After purchase, the license key is emailed immediately.
 
 ### Activating Pro — Docker / self-hosted users
 
-Add the following to your `.env` file (see `.env.example`):
+Add to your `.env` file:
 
 ```env
-# Required for Pro features
 CAREERCLAW_PRO_KEY=YOUR-KEY-HERE
-
-# Provider-specific keys for LLM-enhanced drafts (recommended)
 CAREERCLAW_OPENAI_KEY=sk-proj-...
 CAREERCLAW_ANTHROPIC_KEY=sk-ant-...
-
-# Optional: failover chain (defaults are set in docker-compose.yml)
 CAREERCLAW_LLM_CHAIN=openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6
 ```
 
-Restart the gateway after updating `.env`:
-
-```bash
-docker compose -f docker/docker-compose.yml --env-file .env restart openclaw-gateway
-```
-
-These values are forwarded into the CareerClaw sandbox container via
-`docker/openclaw.yml`. No manual `config set` commands are needed.
-
-The key is validated automatically on first use and cached locally.
-Re-validation happens every 7 days (requires internet access).
-
-### Activating Pro — MyClaw managed users
+### Activating Pro — MyClaw / managed users
 
 Tell your OpenClaw agent:
 > "Set my CAREERCLAW_PRO_KEY to YOUR-KEY-HERE"
-
-The agent will store the key in your OpenClaw config and activate it
-on the next CareerClaw run.
-
----
-
-## LLM-Enhanced Drafts (Pro — user's own API key)
-
-When `CAREERCLAW_PRO_KEY` is set and valid, and at least one provider
-key is available, each top match receives an LLM-enhanced outreach email
-referencing the user's specific resume signals and the job's requirements.
-Falls back to the deterministic template silently on any failure.
-
-**Provider-specific keys (recommended):**
-
-```bash
-# Anthropic
-export CAREERCLAW_ANTHROPIC_KEY=sk-ant-...
-
-# OpenAI
-export CAREERCLAW_OPENAI_KEY=sk-proj-...
-
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt
-```
-
-**Legacy single-key override (not recommended for mixed chains):**
-
-```bash
-export CAREERCLAW_LLM_KEY=sk-ant-...          # Anthropic (default provider)
-export CAREERCLAW_LLM_KEY=sk-proj-...         # OpenAI
-export CAREERCLAW_LLM_PROVIDER=openai
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt
-```
-
-**Failover chain (for resilience across providers):**
-
-```bash
-export CAREERCLAW_LLM_CHAIN=openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6
-```
-
-**Force deterministic draft even when key is set:**
-
-```bash
-python -m careerclaw.briefing --resume-text .careerclaw/resume.txt --no-enhance
-```
-
-JSON draft output includes `"enhanced": true | false` per draft.
-
-**Security:** API keys are read from the environment only. They are never
-logged, written to disk, or included in any structured output.
 
 ---
 
 ## Application Tracking
 
-Tracking is written automatically on each non-dry-run. Users can ask
-you to update a job's status at any time.
-
 Status progression: `saved` → `applied` → `interview` → `rejected`
 
-To update a status manually, edit `.careerclaw/tracking.json` and
-change the `status` field for the relevant `job_id`.
-
-Runtime files (all under `.careerclaw/`, gitignored by default):
+Runtime files (all under `.careerclaw/`):
 
 | File                        | Contents                                    |
 |-----------------------------|---------------------------------------------|
 | `profile.json`              | User profile                                |
-| `resume.txt` / `resume.pdf` | Resume file (save here on first run)        |
+| `resume.txt` / `resume.pdf` | Resume file                                 |
 | `tracking.json`             | Saved jobs keyed by `job_id`                |
 | `runs.jsonl`                | Append-only run log (one line per run)      |
 | `resume_intel.json`         | Cached resume intelligence (auto-generated) |
@@ -340,33 +238,14 @@ Runtime files (all under `.careerclaw/`, gitignored by default):
 
 ## HN Thread ID — Monthly Update Required
 
-The Hacker News "Who is Hiring?" thread is posted on the first weekday
-of each month. The thread ID in `careerclaw/config.py` must be updated
-manually each month to get fresh listings.
+The Hacker News "Who is Hiring?" thread is posted on the first weekday of each month.
+The thread ID in `careerclaw/config.py` must be updated manually each month to get
+fresh listings.
 
-```python
-# careerclaw/config.py
-HN_WHO_IS_HIRING_THREAD_ID = 46857488  # Update monthly
-```
+To find the current thread ID: search `site:news.ycombinator.com "who is hiring"` and
+copy the numeric item ID from the URL.
 
-To find the current thread ID: search
-`site:news.ycombinator.com "who is hiring"` and copy the numeric item
-ID from the URL (e.g. `https://news.ycombinator.com/item?id=XXXXXXXX`).
-
-If the user reports stale or missing HN results, this is the first thing
-to check.
-
----
-
-## Running Tests
-
-```bash
-# All unit and integration tests (offline, no network required)
-python -m pytest -q
-
-# Live smoke test (requires network — run before releases only)
-python -m scripts.smoke_test_sources
-```
+If the user reports stale or missing HN results, this is the first thing to check.
 
 ---
 
@@ -376,9 +255,8 @@ python -m scripts.smoke_test_sources
 |--------------|--------------------------------------------------------------|
 | `read`       | Read `profile.json`, `tracking.json`, and resume files       |
 | `write`      | Write `tracking.json`, `runs.jsonl`, and `resume_intel.json` |
-| `exec`       | Run the Python briefing pipeline                             |
+| `exec`       | Run the CareerClaw pipeline                                  |
 | `web_search` | Fetch RemoteOK RSS and HN Firebase API                       |
 
 No backend calls. No telemetry. No credential storage.
-External network calls: `remoteok.com` (RSS) and
-`hacker-news.firebaseio.com` (public API) only.
+External network calls: `remoteok.com` (RSS) and `hacker-news.firebaseio.com` (public API) only.

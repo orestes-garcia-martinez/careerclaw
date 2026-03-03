@@ -26,8 +26,8 @@ agents:
       workspaceRoot: "/workspace"
 
       docker:
-        # Custom image built by docker/Dockerfile.sandbox (Python 3.11+ + CareerClaw)
-        # Build: docker build -f docker/Dockerfile.sandbox -t openclaw-sandbox:careerclaw .
+        # Custom image built by docker/Dockerfile.sandbox.local (Python 3.11+ + CareerClaw)
+        # Build: docker build -f docker/Dockerfile.sandbox.local -t openclaw-sandbox:careerclaw .
         image: "openclaw-sandbox:careerclaw"
         workdir: "/workspace"
 
@@ -64,6 +64,7 @@ agents:
         # Values are interpolated from the gateway's own environment, which is
         # populated from .env via docker-compose.yml.
         env:
+          HOME: "/workspace"
           # Pro license key — required for gap analysis, resume intelligence, LLM drafts
           CAREERCLAW_PRO_KEY: "${CAREERCLAW_PRO_KEY}"
 
@@ -73,13 +74,13 @@ agents:
 
           # Legacy single-key override (kept for backwards compatibility)
           CAREERCLAW_LLM_KEY: "${CAREERCLAW_LLM_KEY}"
-          CAREERCLAW_LLM_PROVIDER: "${CAREERCLAW_LLM_PROVIDER:-anthropic}"
-          CAREERCLAW_LLM_MODEL: "${CAREERCLAW_LLM_MODEL:-}"
+          CAREERCLAW_LLM_PROVIDER: "${CAREERCLAW_LLM_PROVIDER}"
+          CAREERCLAW_LLM_MODEL: "${CAREERCLAW_LLM_MODEL}"
 
           # Failover chain + retry policy
-          CAREERCLAW_LLM_CHAIN: "${CAREERCLAW_LLM_CHAIN:-openai/gpt-5.2,openai/gpt-4o-mini,anthropic/claude-sonnet-4-6}"
-          CAREERCLAW_LLM_MAX_RETRIES: "${CAREERCLAW_LLM_MAX_RETRIES:-2}"
-          CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS: "${CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS:-2}"
+          CAREERCLAW_LLM_CHAIN: "${CAREERCLAW_LLM_CHAIN}"
+          CAREERCLAW_LLM_MAX_RETRIES: "${CAREERCLAW_LLM_MAX_RETRIES}"
+          CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS: "${CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS}"
 
       # Auto-prune idle containers after 1 hour to keep Docker clean
       prune:
