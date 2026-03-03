@@ -10,6 +10,28 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ---
 
+## [0.7.2] - 2026-03-03
+
+### Fixed
+- **Sandbox pip bootstrap** (`SKILL.md`): The default `openclaw:local` sandbox image ships
+  Python 3.11 but no `pip` or `ensurepip`. The previous self-healing check
+  (`careerclaw --help || python3 -m pip install careerclaw`) failed silently with
+  `No module named pip`. Replaced with a two-step bootstrap:
+  1. Download and install pip via `curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages`
+  2. Install CareerClaw with `python3 -m pip install --quiet --break-system-packages careerclaw`
+- **CLI invocation** (`SKILL.md`): Replaced all `careerclaw briefing` calls with
+  `python3 -m careerclaw.briefing`. The `careerclaw` entry point script installs to
+  `/home/node/.local/bin` which is not on PATH in the sandbox, and the binary has
+  restricted execute permissions. Using the module form bypasses both issues.
+
+### Changed
+- `SKILL.md` `requires.bins`: added `curl` alongside `python3` to document the bootstrap
+  dependency explicitly.
+- Self-healing check updated in three locations in `SKILL.md`: the "Before Running Any
+  Command" section, Step 4 of First Run setup, and the "Running the Daily Briefing" section.
+
+---
+
 ## [0.7.1] - 2026-02-26
 
 ### Changed
@@ -37,7 +59,7 @@ The format follows Keep a Changelog and Semantic Versioning.
 ### Added
 - Production-grade LLM draft enhancement failover chain via `CAREERCLAW_LLM_CHAIN` (provider/model candidates).
 - Retry + circuit breaker controls for the draft enhancer (`CAREERCLAW_LLM_MAX_RETRIES`, `CAREERCLAW_LLM_CIRCUIT_BREAKER_FAILS`).
-- README “LLM Architecture” section explaining Agent Layer (OpenClaw) vs Draft Layer (CareerClaw Pro).
+- README "LLM Architecture" section explaining Agent Layer (OpenClaw) vs Draft Layer (CareerClaw Pro).
 
 ### Changed
 - Clean separation of provider keys:
@@ -288,7 +310,7 @@ other non-tech industries — essential for a truly audience-agnostic skill.
 ### Added
 - Centralized configuration
 - RemoteOK RSS adapter
-- Hacker News “Who is hiring?” adapter
+- Hacker News "Who is hiring?" adapter
 - Canonical `NormalizedJob` schema
 - Instrumentation primitive: `BriefingRun`
 - Source aggregation layer
