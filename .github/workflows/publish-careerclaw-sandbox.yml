@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       careerclaw_version:
-        description: "CareerClaw PyPI version to bake into the sandbox image (e.g., 0.7.1)"
+        description: "CareerClaw PyPI version to bake into the sandbox image"
         required: true
-        default: "0.7.1"
+        default: "0.7.2"
       image_tag_suffix:
         description: "Optional extra tag suffix (e.g., rc1). Leave blank for none."
         required: false

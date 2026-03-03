@@ -1,6 +1,6 @@
 ---
 name: careerclaw
-version: 0.7.1
+version: 0.7.2
 description: >
   Run a job search briefing, find job matches, draft outreach emails,
   or track job applications. Triggers on: daily briefing, job search,
@@ -10,10 +10,10 @@ metadata:
     emoji: "🦞"
     primaryEnv: CAREERCLAW_PRO_KEY
 
-    # careerclaw CLI is installed automatically via pip if not already present.
+    # careerclaw is installed automatically on first run via pip bootstrap.
     # No manual setup or sandbox image configuration required.
     requires:
-      bins: ["python3"]
+      bins: ["python3", "curl"]
 
     optionalEnv:
       - name: CAREERCLAW_PRO_KEY
@@ -49,12 +49,15 @@ all locally, with no backend.
 Before executing any CareerClaw command, always run this self-healing check first:
 
 ```bash
-careerclaw --help >/dev/null 2>&1 || python3 -m pip install --quiet careerclaw
+python3 -m careerclaw.briefing --help >/dev/null 2>&1 || \
+  (curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages --quiet 2>/dev/null; \
+   python3 -m pip install --quiet --break-system-packages careerclaw)
 ```
 
 This ensures CareerClaw is installed in any environment — sandbox, host, or managed cloud —
 with zero manual intervention. If CareerClaw is already installed, the check completes
-instantly and proceeds.
+instantly and proceeds. The pip bootstrap via `get-pip.py` handles environments where pip
+is not pre-installed (such as the default OpenClaw sandbox).
 
 ---
 
@@ -115,8 +118,10 @@ Offer to correct any field they disagree with.
 Once the profile is confirmed, run:
 
 ```bash
-careerclaw --help >/dev/null 2>&1 || python3 -m pip install --quiet careerclaw
-careerclaw briefing --resume-text .careerclaw/resume.txt --dry-run
+python3 -m careerclaw.briefing --help >/dev/null 2>&1 || \
+  (curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages --quiet 2>/dev/null; \
+   python3 -m pip install --quiet --break-system-packages careerclaw)
+python3 -m careerclaw.briefing --resume-text .careerclaw/resume.txt --dry-run
 ```
 
 (Use `--resume-pdf` if the resume was provided as a PDF.)
@@ -131,28 +136,30 @@ they are happy with the results.
 Always run the self-healing check before executing any briefing command:
 
 ```bash
-careerclaw --help >/dev/null 2>&1 || python3 -m pip install --quiet careerclaw
+python3 -m careerclaw.briefing --help >/dev/null 2>&1 || \
+  (curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages --quiet 2>/dev/null; \
+   python3 -m pip install --quiet --break-system-packages careerclaw)
 ```
 
 Then run the briefing:
 
 ```bash
 # Standard run (writes tracking.json and runs.jsonl)
-careerclaw briefing --resume-text .careerclaw/resume.txt
+python3 -m careerclaw.briefing --resume-text .careerclaw/resume.txt
 
 # Dry run — no files written, safe for previewing
-careerclaw briefing --resume-text .careerclaw/resume.txt --dry-run
+python3 -m careerclaw.briefing --resume-text .careerclaw/resume.txt --dry-run
 
 # JSON-only output (for agent parsing)
-careerclaw briefing --resume-text .careerclaw/resume.txt --json
+python3 -m careerclaw.briefing --resume-text .careerclaw/resume.txt --json
 
 # Control analysis verbosity
-careerclaw briefing --analysis off      # no gap analysis (default)
-careerclaw briefing --analysis summary  # fit % and highlights
-careerclaw briefing --analysis full     # gap keywords and phrases
+python3 -m careerclaw.briefing --analysis off      # no gap analysis (default)
+python3 -m careerclaw.briefing --analysis summary  # fit % and highlights
+python3 -m careerclaw.briefing --analysis full     # gap keywords and phrases
 
 # Return more than 3 results
-careerclaw briefing --top-k 5
+python3 -m careerclaw.briefing --top-k 5
 ```
 
 **Always pass `--resume-text` or `--resume-pdf` on every run** to ensure resume intelligence
