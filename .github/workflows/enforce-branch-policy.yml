@@ -1,0 +1,81 @@
+name: Enforce feature branch PR policy
+
+# Runs on every PR targeting main. A PR is only allowed when:
+#   1. The source branch name matches feature/<name>.
+#   2. The feature branch was created directly from main (not from dev
+#      or any other intermediate branch).
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  enforce-branch-policy:
+    name: Enforce feature branch PR policy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Step 1: Validate the source branch name ────────────────────────────
+      - name: Check source branch name format
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "Target branch : ${{ github.base_ref }}"
+          echo "Source branch : $HEAD_REF"
+
+          if [[ ! "$HEAD_REF" =~ ^feature/.+ ]]; then
+            echo "::error::PRs into main must come from a branch named"\
+                 "'feature/<name>' (e.g. feature/my-change)."
+            echo "::error::Got: '$HEAD_REF'"
+            exit 1
+          fi
+
+          echo "Branch name OK: $HEAD_REF"
+
+      # ── Step 2: Check the branch was created from main ────────────────────
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          # Full history is required to inspect the branch point.
+          fetch-depth: 0
+
+      - name: Verify branch was created from main
+        run: |
+          git fetch origin main
+
+          # Commits on the feature branch that are not yet on main.
+          exclusive=$(git log --reverse --format="%H" origin/main..HEAD)
+
+          if [ -z "$exclusive" ]; then
+            echo "::error::The feature branch has no commits beyond main."
+            exit 1
+          fi
+
+          # The oldest exclusive commit is the first commit made after
+          # branching. Every one of its parents must be reachable from
+          # origin/main — proving the branch was cut from main.
+          oldest=$(echo "$exclusive" | head -1)
+          echo "Oldest feature commit : $oldest"
+
+          parents=$(git log --format="%P" -n 1 "$oldest")
+          echo "Its parent(s)         : $parents"
+
+          all_ok=true
+          for parent in $parents; do
+            if git merge-base --is-ancestor "$parent" origin/main; then
+              echo "  ✓ parent $parent is on main"
+            else
+              echo "  ✗ parent $parent is NOT on main"
+              all_ok=false
+            fi
+          done
+
+          if [ "$all_ok" = false ]; then
+            echo "::error::This feature branch was not created from main."
+            echo "::error::Create your branch with:"
+            echo "::error::  git checkout main && git pull origin main"
+            echo "::error::  git checkout -b feature/<name>"
+            exit 1
+          fi
+
+          echo "Branch origin verified: feature branch was cut from main."
